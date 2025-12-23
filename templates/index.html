@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SLMM NL43 Standalone</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 24px; max-width: 900px; }
+    fieldset { margin-bottom: 16px; padding: 12px; }
+    label { display: block; margin-bottom: 6px; font-weight: 600; }
+    input { width: 100%; padding: 8px; margin-bottom: 10px; }
+    button { padding: 8px 12px; margin-right: 8px; }
+    #log { background: #f6f8fa; border: 1px solid #d0d7de; padding: 12px; min-height: 120px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>SLMM NL43 Standalone</h1>
+  <p>Configure a unit (host/port), then use controls to Start/Stop and fetch live status.</p>
+
+  <fieldset>
+    <legend>Unit Config</legend>
+    <label>Unit ID</label>
+    <input id="unitId" value="nl43-1" />
+    <label>Host</label>
+    <input id="host" value="127.0.0.1" />
+    <label>Port</label>
+    <input id="port" type="number" value="80" />
+    <button onclick="saveConfig()">Save Config</button>
+    <button onclick="loadConfig()">Load Config</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Controls</legend>
+    <button onclick="start()">Start</button>
+    <button onclick="stop()">Stop</button>
+    <button onclick="live()">Fetch Live (DOD?)</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Status</legend>
+    <pre id="status">No data yet.</pre>
+  </fieldset>
+
+  <fieldset>
+    <legend>Log</legend>
+    <div id="log"></div>
+  </fieldset>
+
+  <script>
+    const logEl = document.getElementById('log');
+    const statusEl = document.getElementById('status');
+
+    function log(msg) {
+      logEl.textContent += msg + "\n";
+    }
+
+    async function saveConfig() {
+      const unitId = document.getElementById('unitId').value;
+      const host = document.getElementById('host').value;
+      const port = parseInt(document.getElementById('port').value, 10);
+      const res = await fetch(`/api/nl43/${unitId}/config`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ host, tcp_port: port })
+      });
+      const data = await res.json();
+      log(`Saved config: ${JSON.stringify(data)}`);
+    }
+
+    async function loadConfig() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/config`);
+      if (!res.ok) {
+        log(`Load config failed: ${res.status}`);
+        return;
+      }
+      const response = await res.json();
+      const data = response.data;
+      document.getElementById('host').value = data.host;
+      document.getElementById('port').value = data.tcp_port;
+      log(`Loaded config: ${JSON.stringify(data)}`);
+    }
+
+    async function start() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/start`, { method: 'POST' });
+      log(`Start: ${res.status}`);
+    }
+
+    async function stop() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/stop`, { method: 'POST' });
+      log(`Stop: ${res.status}`);
+    }
+
+    async function live() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/live`);
+      const data = await res.json();
+      if (!res.ok) {
+        log(`Live failed: ${res.status} ${JSON.stringify(data)}`);
+        return;
+      }
+      statusEl.textContent = JSON.stringify(data.data, null, 2);
+      log(`Live: ${JSON.stringify(data.data)}`);
+    }
+  </script>
+</body>
+</html>
