@@ -87,7 +87,12 @@ class NL43Client:
             _last_command_time[self.device_key] = time.time()
 
     async def _send_command(self, cmd: str) -> str:
-        """Send ASCII command to NL43 device via TCP."""
+        """Send ASCII command to NL43 device via TCP.
+
+        NL43 protocol returns two lines for query commands:
+        Line 1: Result code (R+0000 for success, error codes otherwise)
+        Line 2: Actual data (for query commands ending with '?')
+        """
         await self._enforce_rate_limit()
 
         logger.info(f"Sending command to {self.device_key}: {cmd.strip()}")
@@ -106,10 +111,40 @@ class NL43Client:
         try:
             writer.write(cmd.encode("ascii"))
             await writer.drain()
-            data = await asyncio.wait_for(reader.readuntil(b"\n"), timeout=self.timeout)
-            response = data.decode(errors="ignore").strip()
-            logger.debug(f"Received response from {self.device_key}: {response}")
-            return response
+
+            # Read first line (result code)
+            first_line_data = await asyncio.wait_for(reader.readuntil(b"\n"), timeout=self.timeout)
+            result_code = first_line_data.decode(errors="ignore").strip()
+
+            # Remove leading $ prompt if present
+            if result_code.startswith("$"):
+                result_code = result_code[1:].strip()
+
+            logger.debug(f"Result code from {self.device_key}: {result_code}")
+
+            # Check result code
+            if result_code == "R+0000":
+                # Success - for query commands, read the second line with actual data
+                is_query = cmd.strip().endswith("?")
+                if is_query:
+                    data_line = await asyncio.wait_for(reader.readuntil(b"\n"), timeout=self.timeout)
+                    response = data_line.decode(errors="ignore").strip()
+                    logger.debug(f"Data line from {self.device_key}: {response}")
+                    return response
+                else:
+                    # Setting command - return success code
+                    return result_code
+            elif result_code == "R+0001":
+                raise ValueError("Command error - device did not recognize command")
+            elif result_code == "R+0002":
+                raise ValueError("Parameter error - invalid parameter value")
+            elif result_code == "R+0003":
+                raise ValueError("Spec/type error - command not supported by this device model")
+            elif result_code == "R+0004":
+                raise ValueError("Status error - device is in wrong state for this command")
+            else:
+                raise ValueError(f"Unknown result code: {result_code}")
+
         except asyncio.TimeoutError:
             logger.error(f"Response timeout from {self.device_key}")
             raise TimeoutError(f"Device did not respond within {self.timeout}s")
@@ -122,15 +157,19 @@ class NL43Client:
                 await writer.wait_closed()
 
     async def request_dod(self) -> NL43Snapshot:
-        """Request DOD (Data Output Display) snapshot from device."""
+        """Request DOD (Data Output Display) snapshot from device.
+
+        Returns parsed measurement data from the device display.
+        """
+        # _send_command now handles result code validation and returns the data line
         resp = await self._send_command("DOD?\r\n")
 
         # Validate response format
         if not resp:
-            logger.warning(f"Empty response from DOD command on {self.device_key}")
-            raise ValueError("Device returned empty response to DOD? command")
+            logger.warning(f"Empty data response from DOD command on {self.device_key}")
+            raise ValueError("Device returned empty data for DOD? command")
 
-        # Remove leading $ prompt if present
+        # Remove leading $ prompt if present (shouldn't be there after _send_command, but be safe)
         if resp.startswith("$"):
             resp = resp[1:].strip()
 
@@ -138,14 +177,15 @@ class NL43Client:
 
         # DOD should return at least some data points
         if len(parts) < 2:
-            logger.error(f"Malformed DOD response from {self.device_key}: {resp}")
-            raise ValueError(f"Malformed DOD response: expected comma-separated values, got: {resp}")
+            logger.error(f"Malformed DOD data from {self.device_key}: {resp}")
+            raise ValueError(f"Malformed DOD data: expected comma-separated values, got: {resp}")
 
         logger.info(f"Parsed {len(parts)} data points from DOD response")
 
         snap = NL43Snapshot(unit_id="", raw_payload=resp, measurement_state="Measure")
 
         # Parse known positions (based on NL43 communication guide)
+        # DOD format: Main Lp, Main Leq, Main LE, Main Lmax, Main Lmin, LN1-5, Lpeak, LIeq, Leq,mov, Ltm5, flags...
         try:
             if len(parts) >= 1:
                 snap.lp = parts[0]
@@ -163,7 +203,15 @@ class NL43Client:
         return snap
 
     async def start(self):
-        await self._send_command("$Measure, Start\r\n")
+        """Start measurement on the device.
+
+        According to NL43 protocol: Measure,Start (no $ prefix, capitalized param)
+        """
+        await self._send_command("Measure,Start\r\n")
 
     async def stop(self):
-        await self._send_command("$Measure, Stop\r\n")
+        """Stop measurement on the device.
+
+        According to NL43 protocol: Measure,Stop (no $ prefix, capitalized param)
+        """
+        await self._send_command("Measure,Stop\r\n")

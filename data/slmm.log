@@ -2,3 +2,92 @@
 2025-12-23 19:02:07,048 - app.main - INFO - CORS allowed origins: ['*']
 2025-12-23 19:02:19,874 - app.main - INFO - Database tables initialized
 2025-12-23 19:02:19,874 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 19:25:54,057 - app.main - INFO - Database tables initialized
+2025-12-23 19:25:54,057 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 19:26:08,782 - app.services - INFO - Sending command to 63.45.161.130:2255: DOD?
+2025-12-23 19:26:13,783 - app.services - ERROR - Connection timeout to 63.45.161.130:2255
+2025-12-23 19:26:13,783 - app.routers - ERROR - Failed to get live status for nl43-1: Failed to connect to device at 63.45.161.130:2255
+2025-12-23 19:32:21,893 - app.routers - INFO - Updated config for unit nl43-1
+2025-12-23 19:32:24,189 - app.services - INFO - Sending command to 63.45.161.130:52255: DOD?
+2025-12-23 19:32:29,191 - app.services - ERROR - Connection timeout to 63.45.161.130:52255
+2025-12-23 19:32:29,191 - app.routers - ERROR - Failed to get live status for nl43-1: Failed to connect to device at 63.45.161.130:52255
+2025-12-23 19:33:01,847 - app.services - INFO - Sending command to 63.45.161.130:52255: DOD?
+2025-12-23 19:33:06,848 - app.services - ERROR - Connection timeout to 63.45.161.130:52255
+2025-12-23 19:33:06,848 - app.routers - ERROR - Failed to get live status for nl43-1: Failed to connect to device at 63.45.161.130:52255
+2025-12-23 19:33:07,508 - app.routers - INFO - Updated config for unit nl43-1
+2025-12-23 19:33:09,056 - app.services - INFO - Sending command to 63.45.161.130:5225: DOD?
+2025-12-23 19:33:14,057 - app.services - ERROR - Connection timeout to 63.45.161.130:5225
+2025-12-23 19:33:14,057 - app.routers - ERROR - Failed to get live status for nl43-1: Failed to connect to device at 63.45.161.130:5225
+2025-12-23 19:33:22,649 - app.services - INFO - Sending command to 63.45.161.130:5225: $Measure, Start
+2025-12-23 19:33:27,650 - app.services - ERROR - Connection timeout to 63.45.161.130:5225
+2025-12-23 19:33:27,650 - app.routers - ERROR - Failed to start measurement on nl43-1: Failed to connect to device at 63.45.161.130:5225
+2025-12-23 19:39:10,370 - app.routers - INFO - Updated config for unit nl43-1
+2025-12-23 19:39:12,948 - app.services - INFO - Sending command to 63.45.161.30:5225: DOD?
+2025-12-23 19:39:17,948 - app.services - ERROR - Connection timeout to 63.45.161.30:5225
+2025-12-23 19:39:17,948 - app.routers - ERROR - Failed to get live status for nl43-1: Failed to connect to device at 63.45.161.30:5225
+2025-12-23 19:39:40,472 - app.services - INFO - Sending command to 63.45.161.30:5225: $Measure, Start
+2025-12-23 19:39:45,472 - app.services - ERROR - Connection timeout to 63.45.161.30:5225
+2025-12-23 19:39:45,472 - app.routers - ERROR - Failed to start measurement on nl43-1: Failed to connect to device at 63.45.161.30:5225
+2025-12-23 19:39:52,929 - app.services - INFO - Sending command to 63.45.161.30:5225: $Measure, Stop
+2025-12-23 19:39:57,929 - app.services - ERROR - Connection timeout to 63.45.161.30:5225
+2025-12-23 19:39:57,929 - app.routers - ERROR - Failed to stop measurement on nl43-1: Failed to connect to device at 63.45.161.30:5225
+2025-12-23 19:40:15,626 - app.services - INFO - Sending command to 63.45.161.30:5225: DOD?
+2025-12-23 19:40:20,626 - app.services - ERROR - Connection timeout to 63.45.161.30:5225
+2025-12-23 19:40:20,626 - app.routers - ERROR - Failed to get live status for nl43-1: Failed to connect to device at 63.45.161.30:5225
+2025-12-23 19:41:48,870 - app.routers - INFO - Updated config for unit nl43-1
+2025-12-23 19:41:51,383 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 19:41:51,551 - app.services - ERROR - Malformed DOD response from 63.45.161.30:2255: R+0000
+2025-12-23 19:41:51,551 - app.routers - ERROR - Invalid response from device nl43-1: Malformed DOD response: expected comma-separated values, got: R+0000
+2025-12-23 19:41:59,639 - app.services - INFO - Sending command to 63.45.161.30:2255: $Measure, Start
+2025-12-23 19:41:59,774 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 19:42:12,493 - app.services - INFO - Sending command to 63.45.161.30:2255: $Measure, Stop
+2025-12-23 19:42:12,654 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-23 19:42:21,145 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 19:42:21,304 - app.services - ERROR - Malformed DOD response from 63.45.161.30:2255: R+0000
+2025-12-23 19:42:21,304 - app.routers - ERROR - Invalid response from device nl43-1: Malformed DOD response: expected comma-separated values, got: R+0000
+2025-12-23 19:43:43,946 - app.services - INFO - Sending command to 63.45.161.30:2255: $Measure, Start
+2025-12-23 19:43:44,096 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 19:57:13,076 - app.main - INFO - Database tables initialized
+2025-12-23 19:57:13,077 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 19:57:31,950 - app.main - INFO - Database tables initialized
+2025-12-23 19:57:31,950 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 19:58:52,676 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 19:58:52,824 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 19:58:52,833 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 19:59:05,367 - app.services - INFO - Sending command to 63.45.161.30:2255: $Measure, Start
+2025-12-23 19:59:05,534 - app.services - ERROR - Communication error with 63.45.161.30:2255: Command error - device did not recognize command
+2025-12-23 19:59:05,534 - app.routers - ERROR - Unexpected error starting measurement on nl43-1: Command error - device did not recognize command
+2025-12-23 19:59:25,765 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 19:59:26,024 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 19:59:26,044 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 19:59:29,829 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 19:59:29,983 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 19:59:29,991 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 20:01:30,447 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 20:01:30,624 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 20:01:30,633 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 20:01:31,448 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 20:01:31,663 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 20:01:31,671 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 20:13:43,728 - app.main - INFO - Database tables initialized
+2025-12-23 20:13:43,728 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 20:14:33,467 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 20:14:33,625 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 20:14:33,635 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 20:14:39,641 - app.services - INFO - Sending command to 63.45.161.30:2255: $Measure,Start
+2025-12-23 20:14:39,935 - app.services - ERROR - Communication error with 63.45.161.30:2255: Command error - device did not recognize command
+2025-12-23 20:14:39,935 - app.routers - ERROR - Unexpected error starting measurement on nl43-1: Command error - device did not recognize command
+2025-12-23 20:23:03,818 - app.main - INFO - Database tables initialized
+2025-12-23 20:23:03,818 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 20:23:58,949 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 20:23:59,105 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 20:23:59,115 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 20:24:00,869 - app.services - INFO - Sending command to 63.45.161.30:2255: $Measure,1
+2025-12-23 20:24:01,185 - app.services - ERROR - Communication error with 63.45.161.30:2255: Command error - device did not recognize command
+2025-12-23 20:24:01,185 - app.routers - ERROR - Unexpected error starting measurement on nl43-1: Command error - device did not recognize command
+2025-12-23 20:29:41,079 - app.main - INFO - Database tables initialized
+2025-12-23 20:29:41,079 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 20:29:56,999 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 20:29:57,135 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 20:30:46,229 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 20:30:46,455 - app.routers - INFO - Stopped measurement on unit nl43-1
