@@ -334,6 +334,30 @@ class NL43Client:
             "device_key": self.device_key,
         }
 
+    async def sleep(self):
+        """Put the device into sleep mode to conserve battery.
+
+        Sleep mode is useful for battery conservation between scheduled measurements.
+        Device can be woken up remotely via TCP command or by pressing a button.
+        """
+        await self._send_command("Sleep Mode,On\r\n")
+        logger.info(f"Device {self.device_key} entering sleep mode")
+
+    async def wake(self):
+        """Wake the device from sleep mode.
+
+        Note: This may not work if the device is in deep sleep.
+        Physical button press might be required in some cases.
+        """
+        await self._send_command("Sleep Mode,Off\r\n")
+        logger.info(f"Device {self.device_key} waking from sleep mode")
+
+    async def get_sleep_status(self) -> str:
+        """Get the current sleep mode status."""
+        resp = await self._send_command("Sleep Mode?\r\n")
+        logger.info(f"Sleep mode status on {self.device_key}: {resp}")
+        return resp.strip()
+
     async def stream_drd(self, callback):
         """Stream continuous DRD output from the device.
 

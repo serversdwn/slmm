@@ -42,6 +42,13 @@
   </fieldset>
 
   <fieldset>
+    <legend>Power Management</legend>
+    <button onclick="sleepDevice()">Sleep</button>
+    <button onclick="wakeDevice()">Wake</button>
+    <button onclick="getSleepStatus()">Check Sleep Status</button>
+  </fieldset>
+
+  <fieldset>
     <legend>Device Info</legend>
     <button onclick="getBattery()">Get Battery</button>
     <button onclick="getClock()">Get Clock</button>
@@ -195,6 +202,40 @@
       const res = await fetch(`/api/nl43/${unitId}/reset`, { method: 'POST' });
       const data = await res.json();
       log(`Reset: ${res.status} - ${data.message || JSON.stringify(data)}`);
+    }
+
+    // Power management functions
+    async function sleepDevice() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/sleep`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        log(`Device entering sleep mode`);
+      } else {
+        log(`Sleep failed: ${res.status} - ${data.detail}`);
+      }
+    }
+
+    async function wakeDevice() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/wake`, { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        log(`Device waking from sleep mode`);
+      } else {
+        log(`Wake failed: ${res.status} - ${data.detail}`);
+      }
+    }
+
+    async function getSleepStatus() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/sleep/status`);
+      const data = await res.json();
+      if (res.ok) {
+        log(`Sleep Status: ${data.sleep_status}`);
+      } else {
+        log(`Get Sleep Status failed: ${res.status} - ${data.detail}`);
+      }
     }
 
     // Device info functions

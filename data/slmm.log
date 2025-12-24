@@ -525,3 +525,72 @@
 2025-12-24 06:13:55,260 - app.services - INFO - Sending command to 63.45.161.30:2255: Clock,2025/12/24,01:13:57
 2025-12-24 06:13:55,422 - app.services - ERROR - Communication error with 63.45.161.30:2255: Parameter error - invalid parameter value
 2025-12-24 06:13:55,422 - app.routers - ERROR - Failed to set clock for nl43-1: Parameter error - invalid parameter value
+2025-12-24 06:19:00,619 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-24 06:19:00,786 - app.services - INFO - FTP status on 63.45.161.30:2255: On
+2025-12-24 06:37:54,574 - app.main - INFO - Database tables initialized
+2025-12-24 06:37:54,574 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 06:38:14,277 - app.main - INFO - Database tables initialized
+2025-12-24 06:38:14,278 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 06:42:27,130 - app.main - INFO - Database tables initialized
+2025-12-24 06:42:27,130 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 06:42:35,745 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode?
+2025-12-24 06:42:35,897 - app.services - INFO - Sleep mode status on 63.45.161.30:2255: On
+2025-12-24 06:42:43,362 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode,On
+2025-12-24 06:42:43,519 - app.services - INFO - Device 63.45.161.30:2255 entering sleep mode
+2025-12-24 06:42:43,519 - app.routers - INFO - Put device nl43-1 to sleep
+2025-12-24 06:43:16,015 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode?
+2025-12-24 06:43:16,189 - app.services - INFO - Sleep mode status on 63.45.161.30:2255: On
+2025-12-24 06:43:18,686 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode,Off
+2025-12-24 06:43:18,821 - app.services - INFO - Device 63.45.161.30:2255 waking from sleep mode
+2025-12-24 06:43:18,821 - app.routers - INFO - Woke device nl43-1 from sleep
+2025-12-24 06:43:24,399 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode?
+2025-12-24 06:43:24,540 - app.services - INFO - Sleep mode status on 63.45.161.30:2255: Off
+2025-12-24 06:43:28,072 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-24 06:43:28,222 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-24 06:43:28,222 - app.routers - ERROR - Unexpected error stopping measurement on nl43-1: Status error - device is in wrong state for this command
+2025-12-24 06:43:33,679 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-24 06:43:33,821 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-24 06:43:52,700 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode,On
+2025-12-24 06:43:52,862 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-24 06:43:52,862 - app.routers - ERROR - Failed to put nl43-1 to sleep: Status error - device is in wrong state for this command
+2025-12-24 06:44:10,369 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-24 06:44:10,621 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-24 06:44:16,394 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store,Start
+2025-12-24 06:44:16,541 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-24 06:44:16,542 - app.routers - ERROR - Unexpected error storing data on nl43-1: Status error - device is in wrong state for this command
+2025-12-24 06:44:24,202 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 06:44:24,980 - app.services - INFO - Found 4 files/directories on 63.45.161.30:2255
+2025-12-24 06:44:26,646 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43
+2025-12-24 06:44:27,460 - app.services - INFO - Found 9 files/directories on 63.45.161.30:2255
+2025-12-24 06:44:30,506 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/Auto_0020
+2025-12-24 06:44:31,381 - app.services - INFO - Found 3 files/directories on 63.45.161.30:2255
+2025-12-24 06:44:40,997 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,Off
+2025-12-24 06:44:41,142 - app.services - INFO - FTP disabled on 63.45.161.30:2255
+2025-12-24 06:44:41,142 - app.routers - INFO - Disabled FTP on unit nl43-1
+2025-12-24 06:44:43,505 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 06:44:43,581 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: [Errno 111] Connection refused
+2025-12-24 06:44:43,582 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: [Errno 111] Connection refused
+2025-12-24 06:44:45,499 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 06:44:45,581 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: [Errno 111] Connection refused
+2025-12-24 06:44:45,581 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: [Errno 111] Connection refused
+2025-12-24 06:44:49,473 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-24 06:44:49,621 - app.services - INFO - FTP status on 63.45.161.30:2255: Off
+2025-12-24 06:44:56,923 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-24 06:44:57,222 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-24 06:44:57,222 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-24 06:45:05,561 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-24 06:45:05,562 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-24 06:45:05,562 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-24 06:45:05,701 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-24 06:45:44,315 - app.routers - ERROR - Failed to send snapshot via WebSocket: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-24 06:45:44,316 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-24 06:45:44,316 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-24 06:45:44,316 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-24 06:45:47,625 - app.services - INFO - Sending command to 63.45.161.30:2255: Battery Level?
+2025-12-24 06:45:47,781 - app.services - INFO - Battery level on 63.45.161.30:2255: Full
+2025-12-24 06:45:59,725 - app.services - INFO - Sending command to 63.45.161.30:2255: Clock,2025/12/24,01:46:01
+2025-12-24 06:45:59,901 - app.services - ERROR - Communication error with 63.45.161.30:2255: Parameter error - invalid parameter value
+2025-12-24 06:45:59,901 - app.routers - ERROR - Failed to set clock for nl43-1: Parameter error - invalid parameter value
+2025-12-24 06:46:07,062 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode,On
+2025-12-24 06:46:07,221 - app.services - INFO - Device 63.45.161.30:2255 entering sleep mode
+2025-12-24 06:46:07,222 - app.routers - INFO - Put device nl43-1 to sleep

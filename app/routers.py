@@ -318,6 +318,65 @@ async def reset_measurement(unit_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail=str(e))
 
 
+@router.post("/{unit_id}/sleep")
+async def sleep_device(unit_id: str, db: Session = Depends(get_db)):
+    """Put the device into sleep mode for battery conservation."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.sleep()
+        logger.info(f"Put device {unit_id} to sleep")
+        return {"status": "ok", "message": "Device entering sleep mode"}
+    except Exception as e:
+        logger.error(f"Failed to put {unit_id} to sleep: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/{unit_id}/wake")
+async def wake_device(unit_id: str, db: Session = Depends(get_db)):
+    """Wake the device from sleep mode."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.wake()
+        logger.info(f"Woke device {unit_id} from sleep")
+        return {"status": "ok", "message": "Device waking from sleep mode"}
+    except Exception as e:
+        logger.error(f"Failed to wake {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/sleep/status")
+async def get_sleep_status(unit_id: str, db: Session = Depends(get_db)):
+    """Get the sleep mode status."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        status = await client.get_sleep_status()
+        return {"status": "ok", "sleep_status": status}
+    except Exception as e:
+        logger.error(f"Failed to get sleep status for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 @router.get("/{unit_id}/battery")
 async def get_battery(unit_id: str, db: Session = Depends(get_db)):
     """Get battery level."""
