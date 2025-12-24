@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pydantic import BaseModel, field_validator
 import logging
 import ipaddress
+import json
+import os
 
 from app.database import get_db
 from app.models import NL43Config, NL43Status
@@ -19,6 +22,8 @@ class ConfigPayload(BaseModel):
     tcp_port: int | None = None
     tcp_enabled: bool | None = None
     ftp_enabled: bool | None = None
+    ftp_username: str | None = None
+    ftp_password: str | None = None
     web_enabled: bool | None = None
 
     @field_validator("host")
@@ -81,6 +86,10 @@ def upsert_config(unit_id: str, payload: ConfigPayload, db: Session = Depends(ge
         cfg.tcp_enabled = payload.tcp_enabled
     if payload.ftp_enabled is not None:
         cfg.ftp_enabled = payload.ftp_enabled
+    if payload.ftp_username is not None:
+        cfg.ftp_username = payload.ftp_username
+    if payload.ftp_password is not None:
+        cfg.ftp_password = payload.ftp_password
     if payload.web_enabled is not None:
         cfg.web_enabled = payload.web_enabled
 
@@ -182,7 +191,7 @@ async def start_measurement(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
     try:
         await client.start()
         logger.info(f"Started measurement on unit {unit_id}")
@@ -207,7 +216,7 @@ async def stop_measurement(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
     try:
         await client.stop()
         logger.info(f"Stopped measurement on unit {unit_id}")
@@ -223,6 +232,32 @@ async def stop_measurement(unit_id: str, db: Session = Depends(get_db)):
     return {"status": "ok", "message": "Measurement stopped"}
 
 
+@router.post("/{unit_id}/store")
+async def manual_store(unit_id: str, db: Session = Depends(get_db)):
+    """Manually store measurement data to SD card."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.manual_store()
+        logger.info(f"Manual store executed on unit {unit_id}")
+        return {"status": "ok", "message": "Data stored to SD card"}
+    except ConnectionError as e:
+        logger.error(f"Failed to store data on {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to communicate with device")
+    except TimeoutError:
+        logger.error(f"Timeout storing data on {unit_id}")
+        raise HTTPException(status_code=504, detail="Device communication timeout")
+    except Exception as e:
+        logger.error(f"Unexpected error storing data on {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/{unit_id}/live")
 async def live_status(unit_id: str, db: Session = Depends(get_db)):
     cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
@@ -232,7 +267,7 @@ async def live_status(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
     try:
         snap = await client.request_dod()
         snap.unit_id = unit_id
@@ -254,4 +289,216 @@ async def live_status(unit_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail="Device returned invalid data")
     except Exception as e:
         logger.error(f"Unexpected error getting live status for {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.websocket("/{unit_id}/stream")
+async def stream_live(websocket: WebSocket, unit_id: str):
+    """WebSocket endpoint for real-time DRD streaming from NL43 device.
+
+    Connects to the device, starts DRD streaming, and pushes updates to the WebSocket client.
+    The stream continues until the client disconnects or an error occurs.
+    """
+    await websocket.accept()
+    logger.info(f"WebSocket connection accepted for unit {unit_id}")
+
+    from app.database import SessionLocal
+
+    db: Session = SessionLocal()
+
+    try:
+        # Get device configuration
+        cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+        if not cfg:
+            await websocket.send_json({"error": "NL43 config not found", "unit_id": unit_id})
+            await websocket.close()
+            return
+
+        if not cfg.tcp_enabled:
+            await websocket.send_json(
+                {"error": "TCP communication is disabled for this device", "unit_id": unit_id}
+            )
+            await websocket.close()
+            return
+
+        # Create client and define callback
+        client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+
+        async def send_snapshot(snap):
+            """Callback that sends each snapshot to the WebSocket client."""
+            snap.unit_id = unit_id
+
+            # Persist to database
+            try:
+                persist_snapshot(snap, db)
+            except Exception as e:
+                logger.error(f"Failed to persist snapshot during stream: {e}")
+
+            # Send to WebSocket client
+            try:
+                await websocket.send_json({
+                    "unit_id": unit_id,
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "measurement_state": snap.measurement_state,
+                    "lp": snap.lp,
+                    "leq": snap.leq,
+                    "lmax": snap.lmax,
+                    "lmin": snap.lmin,
+                    "lpeak": snap.lpeak,
+                    "raw_payload": snap.raw_payload,
+                })
+            except Exception as e:
+                logger.error(f"Failed to send snapshot via WebSocket: {e}")
+                raise
+
+        # Start DRD streaming
+        logger.info(f"Starting DRD stream for unit {unit_id}")
+        await client.stream_drd(send_snapshot)
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for unit {unit_id}")
+    except ConnectionError as e:
+        logger.error(f"Failed to connect to device {unit_id}: {e}")
+        try:
+            await websocket.send_json({"error": "Failed to communicate with device", "detail": str(e)})
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error(f"Unexpected error in WebSocket stream for {unit_id}: {e}")
+        try:
+            await websocket.send_json({"error": "Internal server error", "detail": str(e)})
+        except Exception:
+            pass
+    finally:
+        db.close()
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+        logger.info(f"WebSocket stream closed for unit {unit_id}")
+
+
+@router.post("/{unit_id}/ftp/enable")
+async def enable_ftp(unit_id: str, db: Session = Depends(get_db)):
+    """Enable FTP server on the device."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.enable_ftp()
+        logger.info(f"Enabled FTP on unit {unit_id}")
+        return {"status": "ok", "message": "FTP enabled"}
+    except Exception as e:
+        logger.error(f"Failed to enable FTP on {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to enable FTP: {str(e)}")
+
+
+@router.post("/{unit_id}/ftp/disable")
+async def disable_ftp(unit_id: str, db: Session = Depends(get_db)):
+    """Disable FTP server on the device."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.disable_ftp()
+        logger.info(f"Disabled FTP on unit {unit_id}")
+        return {"status": "ok", "message": "FTP disabled"}
+    except Exception as e:
+        logger.error(f"Failed to disable FTP on {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to disable FTP: {str(e)}")
+
+
+@router.get("/{unit_id}/ftp/status")
+async def get_ftp_status(unit_id: str, db: Session = Depends(get_db)):
+    """Get FTP server status from the device."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        status = await client.get_ftp_status()
+        return {"status": "ok", "ftp_enabled": status.lower() == "on", "ftp_status": status}
+    except Exception as e:
+        logger.error(f"Failed to get FTP status from {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get FTP status: {str(e)}")
+
+
+@router.get("/{unit_id}/ftp/files")
+async def list_ftp_files(unit_id: str, path: str = "/", db: Session = Depends(get_db)):
+    """List files on the device via FTP.
+
+    Query params:
+        path: Directory path on the device (default: root)
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        files = await client.list_ftp_files(path)
+        return {"status": "ok", "path": path, "files": files, "count": len(files)}
+    except ConnectionError as e:
+        logger.error(f"Failed to list FTP files on {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to communicate with device")
+    except Exception as e:
+        logger.error(f"Unexpected error listing FTP files on {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+class DownloadRequest(BaseModel):
+    remote_path: str
+
+
+@router.post("/{unit_id}/ftp/download")
+async def download_ftp_file(unit_id: str, payload: DownloadRequest, db: Session = Depends(get_db)):
+    """Download a file from the device via FTP.
+
+    The file is saved to data/downloads/{unit_id}/ and can be retrieved via the response.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    # Create download directory
+    download_dir = f"data/downloads/{unit_id}"
+    os.makedirs(download_dir, exist_ok=True)
+
+    # Extract filename from remote path
+    filename = os.path.basename(payload.remote_path)
+    if not filename:
+        raise HTTPException(status_code=400, detail="Invalid remote path")
+
+    local_path = os.path.join(download_dir, filename)
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.download_ftp_file(payload.remote_path, local_path)
+        logger.info(f"Downloaded {payload.remote_path} from {unit_id} to {local_path}")
+
+        # Return the file
+        return FileResponse(
+            path=local_path,
+            filename=filename,
+            media_type="application/octet-stream",
+        )
+    except ConnectionError as e:
+        logger.error(f"Failed to download file from {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to communicate with device")
+    except Exception as e:
+        logger.error(f"Unexpected error downloading file from {unit_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")

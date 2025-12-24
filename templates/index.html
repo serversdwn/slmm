@@ -33,7 +33,23 @@
     <legend>Controls</legend>
     <button onclick="start()">Start</button>
     <button onclick="stop()">Stop</button>
+    <button onclick="store()">Store Data</button>
     <button onclick="live()">Fetch Live (DOD?)</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Live Stream (DRD)</legend>
+    <button id="streamBtn" onclick="toggleStream()">Start Stream</button>
+    <span id="streamStatus" style="margin-left: 12px; color: #888;">Not connected</span>
+  </fieldset>
+
+  <fieldset>
+    <legend>FTP File Download</legend>
+    <button onclick="enableFTP()">Enable FTP</button>
+    <button onclick="disableFTP()">Disable FTP</button>
+    <button onclick="checkFTPStatus()">Check FTP Status</button>
+    <button onclick="listFiles()">List Files</button>
+    <div id="fileList" style="margin-top: 12px; max-height: 200px; overflow-y: auto; background: #f6f8fa; border: 1px solid #d0d7de; padding: 8px;"></div>
   </fieldset>
 
   <fieldset>
@@ -49,9 +65,15 @@
   <script>
     const logEl = document.getElementById('log');
     const statusEl = document.getElementById('status');
+    const streamBtn = document.getElementById('streamBtn');
+    const streamStatus = document.getElementById('streamStatus');
+
+    let ws = null;
+    let streamUpdateCount = 0;
 
     function log(msg) {
       logEl.textContent += msg + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
     }
 
     async function saveConfig() {
@@ -93,6 +115,13 @@
       log(`Stop: ${res.status}`);
     }
 
+    async function store() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/store`, { method: 'POST' });
+      const data = await res.json();
+      log(`Store: ${res.status} - ${data.message || JSON.stringify(data)}`);
+    }
+
     async function live() {
       const unitId = document.getElementById('unitId').value;
       const res = await fetch(`/api/nl43/${unitId}/live`);
@@ -103,6 +132,185 @@
       }
       statusEl.textContent = JSON.stringify(data.data, null, 2);
       log(`Live: ${JSON.stringify(data.data)}`);
+    }
+
+    function toggleStream() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        stopStream();
+      } else {
+        startStream();
+      }
+    }
+
+    function startStream() {
+      const unitId = document.getElementById('unitId').value;
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/api/nl43/${unitId}/stream`;
+
+      log(`Connecting to WebSocket: ${wsUrl}`);
+      streamUpdateCount = 0;
+
+      ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => {
+        log('WebSocket connected - DRD streaming started');
+        streamBtn.textContent = 'Stop Stream';
+        streamStatus.textContent = 'Connected';
+        streamStatus.style.color = '#0a0';
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        if (data.error) {
+          log(`Stream error: ${data.error} - ${data.detail || ''}`);
+          return;
+        }
+
+        streamUpdateCount++;
+
+        // Update status display with live data
+        const displayData = {
+          unit_id: data.unit_id,
+          timestamp: data.timestamp,
+          lp: data.lp,
+          leq: data.leq,
+          lmax: data.lmax,
+          lmin: data.lmin,
+          lpeak: data.lpeak
+        };
+        statusEl.textContent = JSON.stringify(displayData, null, 2);
+
+        // Log every 10th update to avoid spamming
+        if (streamUpdateCount % 10 === 0) {
+          log(`Stream update #${streamUpdateCount}: Lp=${data.lp} Leq=${data.leq} Lpeak=${data.lpeak}`);
+        }
+      };
+
+      ws.onerror = (error) => {
+        log('WebSocket error occurred');
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        log(`WebSocket closed (received ${streamUpdateCount} updates)`);
+        streamBtn.textContent = 'Start Stream';
+        streamStatus.textContent = 'Not connected';
+        streamStatus.style.color = '#888';
+        ws = null;
+      };
+    }
+
+    function stopStream() {
+      if (ws) {
+        log('Closing WebSocket...');
+        ws.close();
+      }
+    }
+
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      if (ws) ws.close();
+    });
+
+    // FTP Functions
+    async function enableFTP() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/ftp/enable`, { method: 'POST' });
+      const data = await res.json();
+      log(`Enable FTP: ${res.status} - ${data.message || JSON.stringify(data)}`);
+    }
+
+    async function disableFTP() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/ftp/disable`, { method: 'POST' });
+      const data = await res.json();
+      log(`Disable FTP: ${res.status} - ${data.message || JSON.stringify(data)}`);
+    }
+
+    async function checkFTPStatus() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/ftp/status`);
+      const data = await res.json();
+      if (res.ok) {
+        log(`FTP Status: ${data.ftp_status} (enabled: ${data.ftp_enabled})`);
+      } else {
+        log(`FTP Status check failed: ${res.status}`);
+      }
+    }
+
+    async function listFiles() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/ftp/files?path=/`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        log(`List files failed: ${res.status} ${JSON.stringify(data)}`);
+        return;
+      }
+
+      const fileListEl = document.getElementById('fileList');
+      fileListEl.innerHTML = '';
+
+      if (data.files.length === 0) {
+        fileListEl.textContent = 'No files found';
+        log(`No files found on device`);
+        return;
+      }
+
+      log(`Found ${data.count} files on device`);
+
+      data.files.forEach(file => {
+        const fileDiv = document.createElement('div');
+        fileDiv.style.marginBottom = '8px';
+        fileDiv.style.padding = '4px';
+        fileDiv.style.borderBottom = '1px solid #ddd';
+
+        const icon = file.is_dir ? '📁' : '📄';
+        const size = file.is_dir ? '' : ` (${(file.size / 1024).toFixed(1)} KB)`;
+
+        fileDiv.innerHTML = `
+          ${icon} <strong>${file.name}</strong>${size}
+          ${!file.is_dir ? `<button onclick="downloadFile('${file.path}')" style="margin-left: 8px; padding: 2px 6px; font-size: 0.9em;">Download</button>` : ''}
+          <br><small style="color: #666;">${file.path}</small>
+        `;
+
+        fileListEl.appendChild(fileDiv);
+      });
+    }
+
+    async function downloadFile(remotePath) {
+      const unitId = document.getElementById('unitId').value;
+      log(`Downloading file: ${remotePath}...`);
+
+      try {
+        const res = await fetch(`/api/nl43/${unitId}/ftp/download`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ remote_path: remotePath })
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          log(`Download failed: ${res.status} - ${data.detail || JSON.stringify(data)}`);
+          return;
+        }
+
+        // Trigger browser download
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = remotePath.split('/').pop();
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+
+        log(`Downloaded: ${remotePath}`);
+      } catch (error) {
+        log(`Download error: ${error.message}`);
+      }
     }
   </script>
 </body>

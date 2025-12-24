@@ -73,7 +73,7 @@ async def health_devices():
         configs = db.query(NL43Config).filter_by(tcp_enabled=True).all()
 
         for cfg in configs:
-            client = NL43Client(cfg.host, cfg.tcp_port, timeout=2.0)
+            client = NL43Client(cfg.host, cfg.tcp_port, timeout=2.0, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
             status = {
                 "unit_id": cfg.unit_id,
                 "host": cfg.host,

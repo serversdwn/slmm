@@ -91,3 +91,291 @@
 2025-12-23 20:29:57,135 - app.routers - INFO - Started measurement on unit nl43-1
 2025-12-23 20:30:46,229 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
 2025-12-23 20:30:46,455 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-23 20:35:33,744 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 20:35:33,993 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 20:35:34,000 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 20:35:57,872 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 20:36:02,874 - app.services - ERROR - Connection timeout to 63.45.161.30:2255
+2025-12-23 20:36:02,874 - app.routers - ERROR - Failed to get live status for nl43-1: Failed to connect to device at 63.45.161.30:2255
+2025-12-23 20:37:56,046 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 20:37:56,234 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 20:37:56,254 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 20:38:02,637 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 20:38:02,774 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 20:38:09,492 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 20:38:09,665 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 20:38:09,681 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 21:14:01,816 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 21:14:02,056 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-23 21:14:15,196 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 21:14:15,346 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 21:14:15,357 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 21:44:51,888 - app.main - INFO - Database tables initialized
+2025-12-23 21:44:51,888 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 21:45:29,201 - app.main - INFO - Database tables initialized
+2025-12-23 21:45:29,201 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 21:45:46,360 - app.main - INFO - Database tables initialized
+2025-12-23 21:45:46,360 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 22:18:54,486 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 22:18:54,657 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 22:18:54,667 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 22:21:29,945 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-23 22:21:29,945 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-23 22:21:29,945 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-23 22:21:30,159 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-23 22:22:08,492 - app.routers - ERROR - Failed to send snapshot via WebSocket: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-23 22:22:08,492 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-23 22:22:08,492 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-23 22:22:08,492 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-23 23:04:34,743 - app.main - INFO - Database tables initialized
+2025-12-23 23:04:34,743 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:04:40,114 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-23 23:04:40,280 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-23 23:04:40,280 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-23 23:04:46,040 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-23 23:04:46,200 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-23 23:04:46,200 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-23 23:04:48,486 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-23 23:04:48,639 - app.services - INFO - FTP status on 63.45.161.30:2255: On
+2025-12-23 23:04:59,824 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-23 23:05:00,080 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-23 23:05:00,080 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-23 23:05:07,794 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-23 23:05:07,795 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-23 23:05:07,795 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-23 23:05:07,959 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-23 23:05:12,535 - app.routers - ERROR - Failed to send snapshot via WebSocket: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-23 23:05:12,535 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-23 23:05:12,535 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-23 23:05:12,535 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-23 23:05:13,539 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 23:05:13,680 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 23:05:26,426 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 23:05:26,719 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-23 23:05:29,480 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-23 23:05:29,639 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-23 23:05:29,639 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-23 23:06:10,213 - app.main - INFO - Database tables initialized
+2025-12-23 23:06:10,213 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:06:17,453 - app.main - INFO - Database tables initialized
+2025-12-23 23:06:17,454 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:06:28,863 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 23:06:29,072 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 23:06:29,082 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 23:06:40,433 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 23:06:40,599 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-23 23:06:40,599 - app.routers - ERROR - Unexpected error stopping measurement on nl43-1: Status error - device is in wrong state for this command
+2025-12-23 23:06:51,860 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-23 23:07:04,786 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-23 23:07:05,040 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-23 23:07:05,040 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-23 23:07:11,492 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 23:07:12,118 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 23:07:15,845 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-23 23:07:23,413 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 23:07:23,639 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-23 23:07:28,571 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-23 23:07:29,502 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-23 23:07:29,609 - app.services - INFO - FTP status on 63.45.161.30:2255: On
+2025-12-23 23:07:33,406 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,Off
+2025-12-23 23:07:33,559 - app.services - INFO - FTP disabled on 63.45.161.30:2255
+2025-12-23 23:07:33,559 - app.routers - INFO - Disabled FTP on unit nl43-1
+2025-12-23 23:07:34,407 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-23 23:07:34,565 - app.services - INFO - FTP status on 63.45.161.30:2255: Off
+2025-12-23 23:07:35,926 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-23 23:07:36,129 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-23 23:07:36,129 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-23 23:07:37,244 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-23 23:07:37,359 - app.services - INFO - FTP status on 63.45.161.30:2255: On
+2025-12-23 23:07:45,658 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-23 23:07:58,073 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-23 23:09:02,738 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: [Errno 110] Connection timed out
+2025-12-23 23:09:02,738 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: [Errno 110] Connection timed out
+2025-12-23 23:09:25,266 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: [Errno 110] Connection timed out
+2025-12-23 23:09:25,267 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: [Errno 110] Connection timed out
+2025-12-23 23:09:39,602 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: [Errno 110] Connection timed out
+2025-12-23 23:09:39,606 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: [Errno 110] Connection timed out
+2025-12-23 23:09:55,986 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: [Errno 110] Connection timed out
+2025-12-23 23:09:55,987 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: [Errno 110] Connection timed out
+2025-12-23 23:10:08,274 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: [Errno 110] Connection timed out
+2025-12-23 23:10:08,275 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: [Errno 110] Connection timed out
+2025-12-23 23:10:09,211 - app.main - INFO - Database tables initialized
+2025-12-23 23:10:09,211 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:16:04,065 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-23 23:16:04,066 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-23 23:16:04,066 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-23 23:16:04,239 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-23 23:17:19,332 - app.routers - ERROR - Failed to send snapshot via WebSocket: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-23 23:17:19,333 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-23 23:17:19,333 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-23 23:17:19,333 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-23 23:17:21,479 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 23:17:21,639 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 23:17:30,738 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store
+2025-12-23 23:17:30,887 - app.services - ERROR - Communication error with 63.45.161.30:2255: Command error - device did not recognize command
+2025-12-23 23:17:30,888 - app.routers - ERROR - Unexpected error storing data on nl43-1: Command error - device did not recognize command
+2025-12-23 23:17:37,891 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 23:17:38,127 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-23 23:17:41,793 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store
+2025-12-23 23:17:41,967 - app.services - ERROR - Communication error with 63.45.161.30:2255: Command error - device did not recognize command
+2025-12-23 23:17:41,967 - app.routers - ERROR - Unexpected error storing data on nl43-1: Command error - device did not recognize command
+2025-12-23 23:19:35,329 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-23 23:19:35,330 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-23 23:19:35,330 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-23 23:19:35,479 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-23 23:20:27,813 - app.routers - ERROR - Failed to send snapshot via WebSocket: no close frame received or sent
+2025-12-23 23:20:27,814 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-23 23:20:27,814 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: no close frame received or sent
+2025-12-23 23:20:27,814 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-23 23:30:30,336 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-23 23:30:30,337 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-23 23:30:30,337 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-23 23:30:30,479 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-23 23:30:32,067 - app.routers - ERROR - Failed to send snapshot via WebSocket: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-23 23:30:32,067 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-23 23:30:32,067 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-23 23:30:32,067 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-23 23:30:33,750 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-23 23:30:33,920 - app.services - INFO - FTP status on 63.45.161.30:2255: On
+2025-12-23 23:30:36,071 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-23 23:30:48,848 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 23:30:48,999 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 23:30:53,748 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 23:30:54,039 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-23 23:30:56,037 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store
+2025-12-23 23:30:56,199 - app.services - ERROR - Communication error with 63.45.161.30:2255: Command error - device did not recognize command
+2025-12-23 23:30:56,200 - app.routers - ERROR - Unexpected error storing data on nl43-1: Command error - device did not recognize command
+2025-12-23 23:30:58,439 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 23:30:58,608 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 23:31:01,019 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store
+2025-12-23 23:31:01,159 - app.services - ERROR - Communication error with 63.45.161.30:2255: Command error - device did not recognize command
+2025-12-23 23:31:01,160 - app.routers - ERROR - Unexpected error storing data on nl43-1: Command error - device did not recognize command
+2025-12-23 23:32:33,823 - app.main - INFO - Database tables initialized
+2025-12-23 23:32:33,823 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:32:44,473 - app.services - INFO - Sending command to 63.45.161.30:2255: ManualStore
+2025-12-23 23:32:44,640 - app.services - ERROR - Communication error with 63.45.161.30:2255: Command error - device did not recognize command
+2025-12-23 23:32:44,641 - app.routers - ERROR - Unexpected error storing data on nl43-1: Command error - device did not recognize command
+2025-12-23 23:32:49,360 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 23:32:49,520 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-23 23:32:52,035 - app.services - INFO - Sending command to 63.45.161.30:2255: ManualStore
+2025-12-23 23:32:52,359 - app.services - ERROR - Communication error with 63.45.161.30:2255: Command error - device did not recognize command
+2025-12-23 23:32:52,359 - app.routers - ERROR - Unexpected error storing data on nl43-1: Command error - device did not recognize command
+2025-12-23 23:32:55,975 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 23:32:56,217 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 23:32:56,226 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 23:33:03,172 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 23:33:03,328 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-23 23:33:03,328 - app.routers - ERROR - Unexpected error stopping measurement on nl43-1: Status error - device is in wrong state for this command
+2025-12-23 23:36:10,824 - app.main - INFO - Database tables initialized
+2025-12-23 23:36:10,824 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:36:27,467 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store,Start
+2025-12-23 23:36:27,640 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-23 23:36:27,640 - app.routers - ERROR - Unexpected error storing data on nl43-1: Status error - device is in wrong state for this command
+2025-12-23 23:36:42,238 - app.main - INFO - Database tables initialized
+2025-12-23 23:36:42,238 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:36:50,276 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 23:36:50,449 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 23:36:50,459 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 23:36:52,133 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 23:36:52,399 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 23:36:58,920 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 23:36:59,238 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-23 23:37:01,738 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 23:37:01,880 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 23:37:05,371 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store,Start
+2025-12-23 23:37:05,519 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-23 23:37:05,520 - app.routers - ERROR - Unexpected error storing data on nl43-1: Status error - device is in wrong state for this command
+2025-12-23 23:38:36,178 - app.main - INFO - Database tables initialized
+2025-12-23 23:38:36,178 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:39:24,537 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-23 23:39:24,679 - app.services - INFO - FTP status on 63.45.161.30:2255: On
+2025-12-23 23:39:30,870 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store,Start
+2025-12-23 23:39:30,999 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-23 23:39:30,999 - app.routers - ERROR - Unexpected error storing data on nl43-1: Status error - device is in wrong state for this command
+2025-12-23 23:39:33,124 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-23 23:39:33,289 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-23 23:39:33,309 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-23 23:41:09,171 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-23 23:41:09,519 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-23 23:41:09,519 - app.routers - ERROR - Unexpected error stopping measurement on nl43-1: Status error - device is in wrong state for this command
+2025-12-23 23:41:12,189 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-23 23:41:12,359 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-23 23:41:25,761 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store,Start
+2025-12-23 23:41:26,218 - app.services - INFO - Manual store executed on 63.45.161.30:2255
+2025-12-23 23:41:26,218 - app.routers - INFO - Manual store executed on unit nl43-1
+2025-12-23 23:41:31,981 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-23 23:43:41,458 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: [Errno 110] Connection timed out
+2025-12-23 23:43:41,462 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: [Errno 110] Connection timed out
+2025-12-23 23:45:35,217 - app.main - INFO - Database tables initialized
+2025-12-23 23:45:35,217 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:45:36,338 - app.main - INFO - Database tables initialized
+2025-12-23 23:45:36,339 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-23 23:46:03,381 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 00:18:40,457 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,Off
+2025-12-24 00:18:45,458 - app.services - ERROR - Connection timeout to 63.45.161.30:2255
+2025-12-24 00:18:45,459 - app.routers - ERROR - Failed to disable FTP on nl43-1: Failed to connect to device at 63.45.161.30:2255
+2025-12-24 00:18:48,372 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-24 00:18:53,373 - app.services - ERROR - Connection timeout to 63.45.161.30:2255
+2025-12-24 00:18:53,373 - app.routers - ERROR - Failed to enable FTP on nl43-1: Failed to connect to device at 63.45.161.30:2255
+2025-12-24 00:32:34,574 - app.main - INFO - Database tables initialized
+2025-12-24 00:32:34,574 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 00:32:50,479 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-24 00:32:50,480 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-24 00:32:50,480 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-24 00:32:50,617 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-24 00:33:14,274 - app.routers - ERROR - Failed to send snapshot via WebSocket: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-24 00:33:14,274 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-24 00:33:14,274 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-24 00:33:14,274 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-24 00:33:15,714 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-24 00:33:15,937 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-24 00:33:15,937 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-24 00:33:20,974 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-24 00:33:21,220 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-24 00:33:29,089 - app.services - INFO - Sending command to 63.45.161.30:2255: Manual Store,Start
+2025-12-24 00:33:29,218 - app.services - ERROR - Communication error with 63.45.161.30:2255: Status error - device is in wrong state for this command
+2025-12-24 00:33:29,218 - app.routers - ERROR - Unexpected error storing data on nl43-1: Status error - device is in wrong state for this command
+2025-12-24 00:33:38,733 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-24 00:33:38,897 - app.services - INFO - FTP status on 63.45.161.30:2255: On
+2025-12-24 00:33:41,454 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 00:35:50,802 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: [Errno 110] Connection timed out
+2025-12-24 00:35:50,803 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: [Errno 110] Connection timed out
+2025-12-24 01:07:41,525 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-24 01:07:41,525 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-24 01:07:41,526 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-24 01:07:41,696 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-24 01:07:57,989 - app.routers - ERROR - Failed to send snapshot via WebSocket: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-24 01:07:57,989 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-24 01:07:57,989 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-24 01:07:57,989 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-24 01:57:24,413 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-24 01:57:24,738 - app.services - INFO - FTP status on 63.45.161.30:2255: On
+2025-12-24 01:57:29,272 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 01:57:29,578 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: Waiting for ('230', '33x') but got 530 [' Login Fail']
+2025-12-24 01:57:29,578 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: Waiting for ('230', '33x') but got 530 [' Login Fail']
+2025-12-24 01:57:38,883 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-24 01:57:39,018 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-24 01:57:39,018 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-24 01:57:40,971 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 01:57:41,299 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: Waiting for ('230', '33x') but got 530 [' Login Fail']
+2025-12-24 01:57:41,299 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: Waiting for ('230', '33x') but got 530 [' Login Fail']
+2025-12-24 01:59:59,951 - app.main - INFO - Database tables initialized
+2025-12-24 01:59:59,951 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:00:23,252 - app.main - INFO - Database tables initialized
+2025-12-24 02:00:23,252 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:00:38,817 - app.main - INFO - Database tables initialized
+2025-12-24 02:00:38,817 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:00:52,583 - app.main - INFO - Database tables initialized
+2025-12-24 02:00:52,583 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:01:10,756 - app.main - INFO - Database tables initialized
+2025-12-24 02:01:10,756 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:01:19,001 - app.main - INFO - Database tables initialized
+2025-12-24 02:01:19,001 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:01:25,547 - app.main - INFO - Database tables initialized
+2025-12-24 02:01:25,547 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:01:51,685 - app.main - INFO - Database tables initialized
+2025-12-24 02:01:51,685 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:02:08,074 - app.main - INFO - Database tables initialized
+2025-12-24 02:02:08,074 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:02:13,115 - app.main - INFO - Database tables initialized
+2025-12-24 02:02:13,115 - app.main - INFO - CORS allowed origins: ['*']

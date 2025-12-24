@@ -14,6 +14,8 @@ class NL43Config(Base):
     tcp_port = Column(Integer, default=80)  # NL43 TCP control port (via RX55)
     tcp_enabled = Column(Boolean, default=True)
     ftp_enabled = Column(Boolean, default=False)
+    ftp_username = Column(String, nullable=True)  # FTP login username
+    ftp_password = Column(String, nullable=True)  # FTP login password
     web_enabled = Column(Boolean, default=False)
 
 
