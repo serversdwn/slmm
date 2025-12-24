@@ -30,11 +30,40 @@
   </fieldset>
 
   <fieldset>
-    <legend>Controls</legend>
+    <legend>Measurement Controls</legend>
     <button onclick="start()">Start</button>
     <button onclick="stop()">Stop</button>
+    <button onclick="pause()">Pause</button>
+    <button onclick="resume()">Resume</button>
+    <button onclick="reset()">Reset</button>
     <button onclick="store()">Store Data</button>
-    <button onclick="live()">Fetch Live (DOD?)</button>
+    <button onclick="live()">Fetch Live (DOD)</button>
+    <button onclick="getResults()">Get Results (DLC)</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Device Info</legend>
+    <button onclick="getBattery()">Get Battery</button>
+    <button onclick="getClock()">Get Clock</button>
+    <button onclick="syncClock()">Sync Clock to PC</button>
+  </fieldset>
+
+  <fieldset>
+    <legend>Measurement Settings</legend>
+    <div style="margin-bottom: 8px;">
+      <label style="display: inline; margin-right: 8px;">Frequency Weighting:</label>
+      <button onclick="getFreqWeighting()">Get</button>
+      <button onclick="setFreqWeighting('A')">Set A</button>
+      <button onclick="setFreqWeighting('C')">Set C</button>
+      <button onclick="setFreqWeighting('Z')">Set Z</button>
+    </div>
+    <div>
+      <label style="display: inline; margin-right: 8px;">Time Weighting:</label>
+      <button onclick="getTimeWeighting()">Get</button>
+      <button onclick="setTimeWeighting('F')">Set Fast</button>
+      <button onclick="setTimeWeighting('S')">Set Slow</button>
+      <button onclick="setTimeWeighting('I')">Set Impulse</button>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -132,6 +161,134 @@
       }
       statusEl.textContent = JSON.stringify(data.data, null, 2);
       log(`Live: ${JSON.stringify(data.data)}`);
+    }
+
+    async function getResults() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/results`);
+      const data = await res.json();
+      if (!res.ok) {
+        log(`Get Results failed: ${res.status} ${JSON.stringify(data)}`);
+        return;
+      }
+      statusEl.textContent = JSON.stringify(data.data, null, 2);
+      log(`Results (DLC): Retrieved final calculation data`);
+    }
+
+    // New measurement control functions
+    async function pause() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/pause`, { method: 'POST' });
+      const data = await res.json();
+      log(`Pause: ${res.status} - ${data.message || JSON.stringify(data)}`);
+    }
+
+    async function resume() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/resume`, { method: 'POST' });
+      const data = await res.json();
+      log(`Resume: ${res.status} - ${data.message || JSON.stringify(data)}`);
+    }
+
+    async function reset() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/reset`, { method: 'POST' });
+      const data = await res.json();
+      log(`Reset: ${res.status} - ${data.message || JSON.stringify(data)}`);
+    }
+
+    // Device info functions
+    async function getBattery() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/battery`);
+      const data = await res.json();
+      if (res.ok) {
+        log(`Battery Level: ${data.battery_level}%`);
+      } else {
+        log(`Get Battery failed: ${res.status} - ${data.detail}`);
+      }
+    }
+
+    async function getClock() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/clock`);
+      const data = await res.json();
+      if (res.ok) {
+        log(`Device Clock: ${data.clock}`);
+      } else {
+        log(`Get Clock failed: ${res.status} - ${data.detail}`);
+      }
+    }
+
+    async function syncClock() {
+      const unitId = document.getElementById('unitId').value;
+      const now = new Date();
+      const datetime = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')},${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+
+      const res = await fetch(`/api/nl43/${unitId}/clock`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ datetime })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        log(`Clock synced to: ${datetime}`);
+      } else {
+        log(`Sync Clock failed: ${res.status} - ${data.detail}`);
+      }
+    }
+
+    // Measurement settings functions
+    async function getFreqWeighting() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/frequency-weighting?channel=Main`);
+      const data = await res.json();
+      if (res.ok) {
+        log(`Frequency Weighting (Main): ${data.frequency_weighting}`);
+      } else {
+        log(`Get Freq Weighting failed: ${res.status} - ${data.detail}`);
+      }
+    }
+
+    async function setFreqWeighting(weighting) {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/frequency-weighting`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weighting, channel: 'Main' })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        log(`Frequency Weighting set to: ${weighting}`);
+      } else {
+        log(`Set Freq Weighting failed: ${res.status} - ${data.detail}`);
+      }
+    }
+
+    async function getTimeWeighting() {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/time-weighting?channel=Main`);
+      const data = await res.json();
+      if (res.ok) {
+        log(`Time Weighting (Main): ${data.time_weighting}`);
+      } else {
+        log(`Get Time Weighting failed: ${res.status} - ${data.detail}`);
+      }
+    }
+
+    async function setTimeWeighting(weighting) {
+      const unitId = document.getElementById('unitId').value;
+      const res = await fetch(`/api/nl43/${unitId}/time-weighting`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ weighting, channel: 'Main' })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        log(`Time Weighting set to: ${weighting}`);
+      } else {
+        log(`Set Time Weighting failed: ${res.status} - ${data.detail}`);
+      }
     }
 
     function toggleStream() {
@@ -239,9 +396,12 @@
       }
     }
 
-    async function listFiles() {
+    let currentPath = '/';
+
+    async function listFiles(path = '/') {
+      currentPath = path;
       const unitId = document.getElementById('unitId').value;
-      const res = await fetch(`/api/nl43/${unitId}/ftp/files?path=/`);
+      const res = await fetch(`/api/nl43/${unitId}/ftp/files?path=${encodeURIComponent(path)}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -252,13 +412,58 @@
       const fileListEl = document.getElementById('fileList');
       fileListEl.innerHTML = '';
 
+      // Add breadcrumb navigation
+      const breadcrumb = document.createElement('div');
+      breadcrumb.style.marginBottom = '8px';
+      breadcrumb.style.padding = '4px';
+      breadcrumb.style.background = '#e1e4e8';
+      breadcrumb.style.borderRadius = '3px';
+      breadcrumb.innerHTML = '<strong>Path:</strong> ';
+
+      const pathParts = path.split('/').filter(p => p);
+      let builtPath = '/';
+
+      // Root link
+      const rootLink = document.createElement('a');
+      rootLink.href = '#';
+      rootLink.textContent = '/';
+      rootLink.style.marginRight = '4px';
+      rootLink.onclick = (e) => { e.preventDefault(); listFiles('/'); };
+      breadcrumb.appendChild(rootLink);
+
+      // Path component links
+      pathParts.forEach((part, idx) => {
+        builtPath += part + '/';
+        const linkPath = builtPath;
+
+        const separator = document.createElement('span');
+        separator.textContent = ' / ';
+        breadcrumb.appendChild(separator);
+
+        const link = document.createElement('a');
+        link.href = '#';
+        link.textContent = part;
+        link.style.marginRight = '4px';
+        if (idx === pathParts.length - 1) {
+          link.style.fontWeight = 'bold';
+          link.style.color = '#000';
+        }
+        link.onclick = (e) => { e.preventDefault(); listFiles(linkPath); };
+        breadcrumb.appendChild(link);
+      });
+
+      fileListEl.appendChild(breadcrumb);
+
       if (data.files.length === 0) {
-        fileListEl.textContent = 'No files found';
-        log(`No files found on device`);
+        const emptyDiv = document.createElement('div');
+        emptyDiv.textContent = 'No files found';
+        emptyDiv.style.padding = '8px';
+        fileListEl.appendChild(emptyDiv);
+        log(`No files found in ${path}`);
         return;
       }
 
-      log(`Found ${data.count} files on device`);
+      log(`Found ${data.count} files in ${path}`);
 
       data.files.forEach(file => {
         const fileDiv = document.createElement('div');
@@ -269,11 +474,18 @@
         const icon = file.is_dir ? '📁' : '📄';
         const size = file.is_dir ? '' : ` (${(file.size / 1024).toFixed(1)} KB)`;
 
-        fileDiv.innerHTML = `
-          ${icon} <strong>${file.name}</strong>${size}
-          ${!file.is_dir ? `<button onclick="downloadFile('${file.path}')" style="margin-left: 8px; padding: 2px 6px; font-size: 0.9em;">Download</button>` : ''}
-          <br><small style="color: #666;">${file.path}</small>
-        `;
+        if (file.is_dir) {
+          fileDiv.innerHTML = `
+            ${icon} <a href="#" onclick="event.preventDefault(); listFiles('${file.path}');" style="font-weight: bold;">${file.name}</a>
+            <br><small style="color: #666;">${file.path}</small>
+          `;
+        } else {
+          fileDiv.innerHTML = `
+            ${icon} <strong>${file.name}</strong>${size}
+            <button onclick="downloadFile('${file.path}')" style="margin-left: 8px; padding: 2px 6px; font-size: 0.9em;">Download</button>
+            <br><small style="color: #666;">${file.path}</small>
+          `;
+        }
 
         fileListEl.appendChild(fileDiv);
       });

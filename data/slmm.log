@@ -379,3 +379,149 @@
 2025-12-24 02:02:08,074 - app.main - INFO - CORS allowed origins: ['*']
 2025-12-24 02:02:13,115 - app.main - INFO - Database tables initialized
 2025-12-24 02:02:13,115 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:03:20,909 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:03:21,218 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: Waiting for ('230', '33x') but got 530 [' Login Fail']
+2025-12-24 02:03:21,218 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: Waiting for ('230', '33x') but got 530 [' Login Fail']
+2025-12-24 02:03:26,148 - app.main - INFO - Database tables initialized
+2025-12-24 02:03:26,149 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:04:55,026 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:04:55,339 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: Waiting for ('230', '33x') but got 530 [' Login Fail']
+2025-12-24 02:04:55,339 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: Waiting for ('230', '33x') but got 530 [' Login Fail']
+2025-12-24 02:12:30,900 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:12:31,978 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: Waiting for ('227',) but got 502 [' Not Implemented']
+2025-12-24 02:12:31,978 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: Waiting for ('227',) but got 502 [' Not Implemented']
+2025-12-24 02:12:42,647 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-24 02:12:42,819 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-24 02:12:42,819 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-24 02:12:46,890 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:12:47,779 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: Waiting for ('227',) but got 502 [' Not Implemented']
+2025-12-24 02:12:47,779 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: Waiting for ('227',) but got 502 [' Not Implemented']
+2025-12-24 02:14:28,289 - app.main - INFO - Database tables initialized
+2025-12-24 02:14:28,289 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:14:29,306 - app.main - INFO - Database tables initialized
+2025-12-24 02:14:29,306 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:14:58,933 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-24 02:14:59,099 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-24 02:14:59,099 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-24 02:14:59,921 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:15:00,339 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: No passive commands provided
+2025-12-24 02:15:00,339 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: No passive commands provided
+2025-12-24 02:15:32,844 - app.main - INFO - Database tables initialized
+2025-12-24 02:15:32,844 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:15:34,474 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:15:34,859 - app.services - ERROR - Failed to list FTP files on 63.45.161.30:2255: No passive commands provided
+2025-12-24 02:15:34,859 - app.routers - ERROR - Failed to list FTP files on nl43-1: FTP connection failed: No passive commands provided
+2025-12-24 02:16:31,671 - app.main - INFO - Database tables initialized
+2025-12-24 02:16:31,671 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:17:13,560 - app.main - INFO - Database tables initialized
+2025-12-24 02:17:13,560 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:17:29,976 - app.main - INFO - Database tables initialized
+2025-12-24 02:17:29,976 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:30:23,927 - app.main - INFO - Database tables initialized
+2025-12-24 02:30:23,928 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:30:43,933 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-24 02:30:43,934 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-24 02:30:43,934 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-24 02:30:44,099 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-24 02:30:47,915 - app.routers - ERROR - Failed to send snapshot via WebSocket: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-24 02:30:47,916 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-24 02:30:47,916 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-24 02:30:47,916 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-24 02:30:50,949 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-24 02:30:51,149 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-24 02:30:51,159 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-24 02:30:54,330 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:30:55,059 - app.services - INFO - Found 4 files/directories on 63.45.161.30:2255
+2025-12-24 02:31:12,298 - app.services - INFO - Downloading /NIKON001.DSC from 63.45.161.30:2255 to data/downloads/nl43-1/NIKON001.DSC
+2025-12-24 02:31:13,140 - app.services - INFO - Successfully downloaded /NIKON001.DSC to data/downloads/nl43-1/NIKON001.DSC
+2025-12-24 02:31:13,220 - app.routers - INFO - Downloaded /NIKON001.DSC from nl43-1 to data/downloads/nl43-1/NIKON001.DSC
+2025-12-24 02:34:49,457 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:34:50,419 - app.services - INFO - Found 4 files/directories on 63.45.161.30:2255
+2025-12-24 02:34:52,824 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43
+2025-12-24 02:34:53,709 - app.services - INFO - Found 8 files/directories on 63.45.161.30:2255
+2025-12-24 02:35:00,136 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/Screenshot
+2025-12-24 02:35:00,942 - app.services - INFO - Found 1 files/directories on 63.45.161.30:2255
+2025-12-24 02:35:03,332 - app.services - INFO - Downloading /NL-43/Screenshot/0001_20251223_193950.bmp from 63.45.161.30:2255 to data/downloads/nl43-1/0001_20251223_193950.bmp
+2025-12-24 02:35:04,939 - app.services - INFO - Successfully downloaded /NL-43/Screenshot/0001_20251223_193950.bmp to data/downloads/nl43-1/0001_20251223_193950.bmp
+2025-12-24 02:35:05,019 - app.routers - INFO - Downloaded /NL-43/Screenshot/0001_20251223_193950.bmp from nl43-1 to data/downloads/nl43-1/0001_20251223_193950.bmp
+2025-12-24 02:35:20,669 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/
+2025-12-24 02:35:21,539 - app.services - INFO - Found 8 files/directories on 63.45.161.30:2255
+2025-12-24 02:35:24,452 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/Auto_0019
+2025-12-24 02:35:25,339 - app.services - INFO - Found 3 files/directories on 63.45.161.30:2255
+2025-12-24 02:35:30,134 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/Auto_0019/Auto_Lp_01
+2025-12-24 02:35:30,939 - app.services - INFO - Found 1 files/directories on 63.45.161.30:2255
+2025-12-24 02:35:34,225 - app.services - INFO - Downloading /NL-43/Auto_0019/Auto_Lp_01/NL_0001_SLM_Lp _0019_0001.rnd from 63.45.161.30:2255 to data/downloads/nl43-1/NL_0001_SLM_Lp _0019_0001.rnd
+2025-12-24 02:35:36,139 - app.services - INFO - Successfully downloaded /NL-43/Auto_0019/Auto_Lp_01/NL_0001_SLM_Lp _0019_0001.rnd to data/downloads/nl43-1/NL_0001_SLM_Lp _0019_0001.rnd
+2025-12-24 02:35:36,219 - app.routers - INFO - Downloaded /NL-43/Auto_0019/Auto_Lp_01/NL_0001_SLM_Lp _0019_0001.rnd from nl43-1 to data/downloads/nl43-1/NL_0001_SLM_Lp _0019_0001.rnd
+2025-12-24 02:36:30,080 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:36:30,779 - app.services - INFO - Found 4 files/directories on 63.45.161.30:2255
+2025-12-24 02:36:34,289 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43
+2025-12-24 02:36:35,109 - app.services - INFO - Found 8 files/directories on 63.45.161.30:2255
+2025-12-24 02:36:40,284 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/Auto_0019
+2025-12-24 02:36:41,220 - app.services - INFO - Found 3 files/directories on 63.45.161.30:2255
+2025-12-24 02:36:43,370 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/Auto_0019/Auto_Lp_01
+2025-12-24 02:36:44,428 - app.services - INFO - Found 1 files/directories on 63.45.161.30:2255
+2025-12-24 02:36:46,101 - app.services - INFO - Downloading /NL-43/Auto_0019/Auto_Lp_01/NL_0001_SLM_Lp _0019_0001.rnd from 63.45.161.30:2255 to data/downloads/nl43-1/NL_0001_SLM_Lp _0019_0001.rnd
+2025-12-24 02:36:47,380 - app.services - INFO - Successfully downloaded /NL-43/Auto_0019/Auto_Lp_01/NL_0001_SLM_Lp _0019_0001.rnd to data/downloads/nl43-1/NL_0001_SLM_Lp _0019_0001.rnd
+2025-12-24 02:36:47,476 - app.routers - INFO - Downloaded /NL-43/Auto_0019/Auto_Lp_01/NL_0001_SLM_Lp _0019_0001.rnd from nl43-1 to data/downloads/nl43-1/NL_0001_SLM_Lp _0019_0001.rnd
+2025-12-24 02:37:18,786 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/Auto_0019/
+2025-12-24 02:37:19,580 - app.services - INFO - Found 3 files/directories on 63.45.161.30:2255
+2025-12-24 02:37:25,812 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/
+2025-12-24 02:37:26,619 - app.services - INFO - Found 8 files/directories on 63.45.161.30:2255
+2025-12-24 02:37:28,988 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/Manual_0019
+2025-12-24 02:37:29,859 - app.services - INFO - Found 1 files/directories on 63.45.161.30:2255
+2025-12-24 02:37:31,775 - app.services - INFO - Downloading /NL-43/Manual_0019/NL_0001_SLM_MAN_0019_0000.rnd from 63.45.161.30:2255 to data/downloads/nl43-1/NL_0001_SLM_MAN_0019_0000.rnd
+2025-12-24 02:37:32,659 - app.services - INFO - Successfully downloaded /NL-43/Manual_0019/NL_0001_SLM_MAN_0019_0000.rnd to data/downloads/nl43-1/NL_0001_SLM_MAN_0019_0000.rnd
+2025-12-24 02:37:32,739 - app.routers - INFO - Downloaded /NL-43/Manual_0019/NL_0001_SLM_MAN_0019_0000.rnd from nl43-1 to data/downloads/nl43-1/NL_0001_SLM_MAN_0019_0000.rnd
+2025-12-24 02:38:02,603 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:38:03,379 - app.services - INFO - Found 4 files/directories on 63.45.161.30:2255
+2025-12-24 02:38:19,338 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-24 02:38:19,499 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-24 02:38:19,499 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-24 02:38:20,339 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP,On
+2025-12-24 02:38:20,500 - app.services - INFO - FTP enabled on 63.45.161.30:2255
+2025-12-24 02:38:20,500 - app.routers - INFO - Enabled FTP on unit nl43-1
+2025-12-24 02:38:23,612 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:38:24,339 - app.services - INFO - Found 4 files/directories on 63.45.161.30:2255
+2025-12-24 02:38:31,856 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /NL-43/
+2025-12-24 02:38:32,660 - app.services - INFO - Found 8 files/directories on 63.45.161.30:2255
+2025-12-24 02:38:35,781 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:38:36,500 - app.services - INFO - Found 4 files/directories on 63.45.161.30:2255
+2025-12-24 02:38:39,724 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /DCIM
+2025-12-24 02:38:40,499 - app.services - INFO - Found 0 files/directories on 63.45.161.30:2255
+2025-12-24 02:38:45,065 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 02:38:45,939 - app.services - INFO - Found 4 files/directories on 63.45.161.30:2255
+2025-12-24 02:41:25,498 - app.main - INFO - Database tables initialized
+2025-12-24 02:41:25,498 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 02:42:08,371 - app.main - INFO - Database tables initialized
+2025-12-24 02:42:08,372 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 05:44:06,113 - app.main - INFO - Database tables initialized
+2025-12-24 05:44:06,113 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 05:44:19,375 - app.main - INFO - Database tables initialized
+2025-12-24 05:44:19,376 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 06:11:27,237 - app.main - INFO - Database tables initialized
+2025-12-24 06:11:27,237 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 06:11:31,752 - app.services - INFO - Sending command to 63.45.161.30:2255: Battery Level?
+2025-12-24 06:11:31,901 - app.services - INFO - Battery level on 63.45.161.30:2255: Full
+2025-12-24 06:11:34,598 - app.services - INFO - Sending command to 63.45.161.30:2255: Clock?
+2025-12-24 06:11:34,742 - app.services - INFO - Clock on 63.45.161.30:2255: 2025/12/24 02:10:55
+2025-12-24 06:11:39,102 - app.services - INFO - Sending command to 63.45.161.30:2255: Clock,2025/12/24,01:11:41
+2025-12-24 06:11:39,262 - app.services - ERROR - Communication error with 63.45.161.30:2255: Parameter error - invalid parameter value
+2025-12-24 06:11:39,262 - app.routers - ERROR - Failed to set clock for nl43-1: Parameter error - invalid parameter value
+2025-12-24 06:12:00,090 - app.services - INFO - Listing FTP files on 63.45.161.30:2255 at /
+2025-12-24 06:12:00,789 - app.services - INFO - Found 4 files/directories on 63.45.161.30:2255
+2025-12-24 06:12:12,263 - app.services - INFO - Sending command to 63.45.161.30:2255: Frequency Weighting (Main)?
+2025-12-24 06:12:12,432 - app.services - INFO - Frequency weighting (Main) on 63.45.161.30:2255: A
+2025-12-24 06:12:23,787 - app.services - INFO - Sending command to 63.45.161.30:2255: Time Weighting (Main)?
+2025-12-24 06:12:23,942 - app.services - INFO - Time weighting (Main) on 63.45.161.30:2255: S
+2025-12-24 06:12:41,070 - app.services - INFO - Sending command to 63.45.161.30:2255: Clock,2025/12/24,01:12:43
+2025-12-24 06:12:41,232 - app.services - ERROR - Communication error with 63.45.161.30:2255: Parameter error - invalid parameter value
+2025-12-24 06:12:41,232 - app.routers - ERROR - Failed to set clock for nl43-1: Parameter error - invalid parameter value
+2025-12-24 06:13:04,056 - app.services - INFO - Sending command to 63.45.161.30:2255: DLC?
+2025-12-24 06:13:04,232 - app.services - INFO - DLC data received from 63.45.161.30:2255: -.-, 43.7, 53.7, 44.1, 43.4, 44.2, 44.2, 43.7, 43.4, 43.3, 59.0,  -.-,  -.-,  -.-,0,0,  -.-,  -.-,  ...
+2025-12-24 06:13:04,232 - app.routers - INFO - Retrieved measurement results for unit nl43-1
+2025-12-24 06:13:29,235 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-24 06:13:29,422 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-24 06:13:55,260 - app.services - INFO - Sending command to 63.45.161.30:2255: Clock,2025/12/24,01:13:57
+2025-12-24 06:13:55,422 - app.services - ERROR - Communication error with 63.45.161.30:2255: Parameter error - invalid parameter value
+2025-12-24 06:13:55,422 - app.routers - ERROR - Failed to set clock for nl43-1: Parameter error - invalid parameter value

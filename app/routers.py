@@ -258,6 +258,208 @@ async def manual_store(unit_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.post("/{unit_id}/pause")
+async def pause_measurement(unit_id: str, db: Session = Depends(get_db)):
+    """Pause the current measurement."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.pause()
+        logger.info(f"Paused measurement on unit {unit_id}")
+        return {"status": "ok", "message": "Measurement paused"}
+    except Exception as e:
+        logger.error(f"Failed to pause measurement on {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/{unit_id}/resume")
+async def resume_measurement(unit_id: str, db: Session = Depends(get_db)):
+    """Resume a paused measurement."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.resume()
+        logger.info(f"Resumed measurement on unit {unit_id}")
+        return {"status": "ok", "message": "Measurement resumed"}
+    except Exception as e:
+        logger.error(f"Failed to resume measurement on {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/{unit_id}/reset")
+async def reset_measurement(unit_id: str, db: Session = Depends(get_db)):
+    """Reset the measurement data."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.reset()
+        logger.info(f"Reset measurement data on unit {unit_id}")
+        return {"status": "ok", "message": "Measurement data reset"}
+    except Exception as e:
+        logger.error(f"Failed to reset measurement on {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/battery")
+async def get_battery(unit_id: str, db: Session = Depends(get_db)):
+    """Get battery level."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        level = await client.get_battery_level()
+        return {"status": "ok", "battery_level": level}
+    except Exception as e:
+        logger.error(f"Failed to get battery level for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/clock")
+async def get_clock(unit_id: str, db: Session = Depends(get_db)):
+    """Get device clock time."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        clock = await client.get_clock()
+        return {"status": "ok", "clock": clock}
+    except Exception as e:
+        logger.error(f"Failed to get clock for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+class ClockPayload(BaseModel):
+    datetime: str  # Format: YYYY/MM/DD,HH:MM:SS
+
+
+@router.put("/{unit_id}/clock")
+async def set_clock(unit_id: str, payload: ClockPayload, db: Session = Depends(get_db)):
+    """Set device clock time."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.set_clock(payload.datetime)
+        return {"status": "ok", "message": f"Clock set to {payload.datetime}"}
+    except Exception as e:
+        logger.error(f"Failed to set clock for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+class WeightingPayload(BaseModel):
+    weighting: str
+    channel: str = "Main"
+
+
+@router.get("/{unit_id}/frequency-weighting")
+async def get_frequency_weighting(unit_id: str, channel: str = "Main", db: Session = Depends(get_db)):
+    """Get frequency weighting (A, C, Z)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        weighting = await client.get_frequency_weighting(channel)
+        return {"status": "ok", "frequency_weighting": weighting, "channel": channel}
+    except Exception as e:
+        logger.error(f"Failed to get frequency weighting for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.put("/{unit_id}/frequency-weighting")
+async def set_frequency_weighting(unit_id: str, payload: WeightingPayload, db: Session = Depends(get_db)):
+    """Set frequency weighting (A, C, Z)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.set_frequency_weighting(payload.weighting, payload.channel)
+        return {"status": "ok", "message": f"Frequency weighting set to {payload.weighting} on {payload.channel}"}
+    except Exception as e:
+        logger.error(f"Failed to set frequency weighting for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/time-weighting")
+async def get_time_weighting(unit_id: str, channel: str = "Main", db: Session = Depends(get_db)):
+    """Get time weighting (F, S, I)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        weighting = await client.get_time_weighting(channel)
+        return {"status": "ok", "time_weighting": weighting, "channel": channel}
+    except Exception as e:
+        logger.error(f"Failed to get time weighting for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.put("/{unit_id}/time-weighting")
+async def set_time_weighting(unit_id: str, payload: WeightingPayload, db: Session = Depends(get_db)):
+    """Set time weighting (F, S, I)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.set_time_weighting(payload.weighting, payload.channel)
+        return {"status": "ok", "message": f"Time weighting set to {payload.weighting} on {payload.channel}"}
+    except Exception as e:
+        logger.error(f"Failed to set time weighting for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 @router.get("/{unit_id}/live")
 async def live_status(unit_id: str, db: Session = Depends(get_db)):
     cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
@@ -289,6 +491,33 @@ async def live_status(unit_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=502, detail="Device returned invalid data")
     except Exception as e:
         logger.error(f"Unexpected error getting live status for {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.get("/{unit_id}/results")
+async def get_results(unit_id: str, db: Session = Depends(get_db)):
+    """Get final calculation results (DLC) from the last measurement."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        results = await client.request_dlc()
+        logger.info(f"Retrieved measurement results for unit {unit_id}")
+        return {"status": "ok", "data": results}
+
+    except ConnectionError as e:
+        logger.error(f"Failed to get results for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to communicate with device")
+    except TimeoutError:
+        logger.error(f"Timeout getting results for {unit_id}")
+        raise HTTPException(status_code=504, detail="Device communication timeout")
+    except Exception as e:
+        logger.error(f"Unexpected error getting results for {unit_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional, List
 from sqlalchemy.orm import Session
-import aioftp
+from ftplib import FTP
+from pathlib import Path
 
 from app.models import NL43Status
 
@@ -237,6 +238,102 @@ class NL43Client:
         await self._send_command("Manual Store,Start\r\n")
         logger.info(f"Manual store executed on {self.device_key}")
 
+    async def pause(self):
+        """Pause the current measurement."""
+        await self._send_command("Pause,On\r\n")
+        logger.info(f"Measurement paused on {self.device_key}")
+
+    async def resume(self):
+        """Resume a paused measurement."""
+        await self._send_command("Pause,Off\r\n")
+        logger.info(f"Measurement resumed on {self.device_key}")
+
+    async def reset(self):
+        """Reset the measurement data."""
+        await self._send_command("Reset\r\n")
+        logger.info(f"Measurement data reset on {self.device_key}")
+
+    async def get_battery_level(self) -> str:
+        """Get the battery level."""
+        resp = await self._send_command("Battery Level?\r\n")
+        logger.info(f"Battery level on {self.device_key}: {resp}")
+        return resp.strip()
+
+    async def get_clock(self) -> str:
+        """Get the device clock time."""
+        resp = await self._send_command("Clock?\r\n")
+        logger.info(f"Clock on {self.device_key}: {resp}")
+        return resp.strip()
+
+    async def set_clock(self, datetime_str: str):
+        """Set the device clock time.
+
+        Args:
+            datetime_str: Time in format YYYY/MM/DD,HH:MM:SS
+        """
+        await self._send_command(f"Clock,{datetime_str}\r\n")
+        logger.info(f"Clock set on {self.device_key} to {datetime_str}")
+
+    async def get_frequency_weighting(self, channel: str = "Main") -> str:
+        """Get frequency weighting (A, C, Z, etc.).
+
+        Args:
+            channel: Main, Sub1, Sub2, or Sub3
+        """
+        resp = await self._send_command(f"Frequency Weighting ({channel})?\r\n")
+        logger.info(f"Frequency weighting ({channel}) on {self.device_key}: {resp}")
+        return resp.strip()
+
+    async def set_frequency_weighting(self, weighting: str, channel: str = "Main"):
+        """Set frequency weighting.
+
+        Args:
+            weighting: A, C, or Z
+            channel: Main, Sub1, Sub2, or Sub3
+        """
+        await self._send_command(f"Frequency Weighting ({channel}),{weighting}\r\n")
+        logger.info(f"Frequency weighting ({channel}) set to {weighting} on {self.device_key}")
+
+    async def get_time_weighting(self, channel: str = "Main") -> str:
+        """Get time weighting (F, S, I).
+
+        Args:
+            channel: Main, Sub1, Sub2, or Sub3
+        """
+        resp = await self._send_command(f"Time Weighting ({channel})?\r\n")
+        logger.info(f"Time weighting ({channel}) on {self.device_key}: {resp}")
+        return resp.strip()
+
+    async def set_time_weighting(self, weighting: str, channel: str = "Main"):
+        """Set time weighting.
+
+        Args:
+            weighting: F (Fast), S (Slow), or I (Impulse)
+            channel: Main, Sub1, Sub2, or Sub3
+        """
+        await self._send_command(f"Time Weighting ({channel}),{weighting}\r\n")
+        logger.info(f"Time weighting ({channel}) set to {weighting} on {self.device_key}")
+
+    async def request_dlc(self) -> dict:
+        """Request DLC (Data Last Calculation) - final stored measurement results.
+
+        This retrieves the complete calculation results from the last/current measurement,
+        including all statistical data. Similar to DOD but for final results.
+
+        Returns:
+            Dict with parsed DLC data
+        """
+        resp = await self._send_command("DLC?\r\n")
+        logger.info(f"DLC data received from {self.device_key}: {resp[:100]}...")
+
+        # Parse DLC response - similar format to DOD
+        # The exact format depends on device configuration
+        # For now, return raw data - can be enhanced based on actual response format
+        return {
+            "raw_data": resp.strip(),
+            "device_key": self.device_key,
+        }
+
     async def stream_drd(self, callback):
         """Stream continuous DRD output from the device.
 
@@ -380,23 +477,45 @@ class NL43Client:
         """
         logger.info(f"Listing FTP files on {self.device_key} at {remote_path}")
 
-        try:
-            # FTP uses standard port 21, not the TCP control port
-            async with aioftp.Client.context(
-                self.host,
-                port=21,
-                user=self.ftp_username,
-                password=self.ftp_password,
-                socket_timeout=10
-            ) as client:
+        def _list_ftp_sync():
+            """Synchronous FTP listing using ftplib (supports active mode)."""
+            ftp = FTP()
+            ftp.set_debuglevel(0)
+            try:
+                # Connect and login
+                ftp.connect(self.host, 21, timeout=10)
+                ftp.login(self.ftp_username, self.ftp_password)
+                ftp.set_pasv(False)  # Force active mode
+
+                # Change to target directory
+                if remote_path != "/":
+                    ftp.cwd(remote_path)
+
+                # Get directory listing with details
                 files = []
-                async for path, info in client.list(remote_path):
+                lines = []
+                ftp.retrlines('LIST', lines.append)
+
+                for line in lines:
+                    # Parse Unix-style ls output
+                    parts = line.split(None, 8)
+                    if len(parts) < 9:
+                        continue
+
+                    is_dir = parts[0].startswith('d')
+                    size = int(parts[4]) if not is_dir else 0
+                    name = parts[8]
+
+                    # Skip . and ..
+                    if name in ('.', '..'):
+                        continue
+
                     file_info = {
-                        "name": path.name,
-                        "path": str(path),
-                        "size": info.get("size", 0),
-                        "modified": info.get("modify", ""),
-                        "is_dir": info["type"] == "dir",
+                        "name": name,
+                        "path": f"{remote_path.rstrip('/')}/{name}",
+                        "size": size,
+                        "modified": f"{parts[5]} {parts[6]} {parts[7]}",
+                        "is_dir": is_dir,
                     }
                     files.append(file_info)
                     logger.debug(f"Found file: {file_info}")
@@ -404,6 +523,15 @@ class NL43Client:
                 logger.info(f"Found {len(files)} files/directories on {self.device_key}")
                 return files
 
+            finally:
+                try:
+                    ftp.quit()
+                except:
+                    pass
+
+        try:
+            # Run synchronous FTP in thread pool
+            return await asyncio.to_thread(_list_ftp_sync)
         except Exception as e:
             logger.error(f"Failed to list FTP files on {self.device_key}: {e}")
             raise ConnectionError(f"FTP connection failed: {str(e)}")
@@ -417,18 +545,31 @@ class NL43Client:
         """
         logger.info(f"Downloading {remote_path} from {self.device_key} to {local_path}")
 
-        try:
-            # FTP uses standard port 21, not the TCP control port
-            async with aioftp.Client.context(
-                self.host,
-                port=21,
-                user=self.ftp_username,
-                password=self.ftp_password,
-                socket_timeout=10
-            ) as client:
-                await client.download(remote_path, local_path, write_into=True)
+        def _download_ftp_sync():
+            """Synchronous FTP download using ftplib (supports active mode)."""
+            ftp = FTP()
+            ftp.set_debuglevel(0)
+            try:
+                # Connect and login
+                ftp.connect(self.host, 21, timeout=10)
+                ftp.login(self.ftp_username, self.ftp_password)
+                ftp.set_pasv(False)  # Force active mode
+
+                # Download file
+                with open(local_path, 'wb') as f:
+                    ftp.retrbinary(f'RETR {remote_path}', f.write)
+
                 logger.info(f"Successfully downloaded {remote_path} to {local_path}")
 
+            finally:
+                try:
+                    ftp.quit()
+                except:
+                    pass
+
+        try:
+            # Run synchronous FTP in thread pool
+            await asyncio.to_thread(_download_ftp_sync)
         except Exception as e:
             logger.error(f"Failed to download {remote_path} from {self.device_key}: {e}")
             raise ConnectionError(f"FTP download failed: {str(e)}")
