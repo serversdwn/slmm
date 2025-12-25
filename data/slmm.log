@@ -609,3 +609,52 @@
 2025-12-24 21:22:06,679 - app.main - INFO - CORS allowed origins: ['*']
 2025-12-24 21:22:38,825 - app.main - INFO - Database tables initialized
 2025-12-24 21:22:38,825 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-25 01:32:30,595 - app.services - INFO - Sending command to 63.45.161.30:2255: Clock,2025/12/24,20:32:32
+2025-12-25 01:32:35,596 - app.services - ERROR - Connection timeout to 63.45.161.30:2255
+2025-12-25 01:32:35,596 - app.routers - ERROR - Failed to set clock for nl43-1: Failed to connect to device at 63.45.161.30:2255
+2025-12-25 01:33:39,481 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Start
+2025-12-25 01:33:39,651 - app.routers - INFO - Started measurement on unit nl43-1
+2025-12-25 01:33:42,646 - app.services - INFO - Sending command to 63.45.161.30:2255: Measure,Stop
+2025-12-25 01:33:42,891 - app.routers - INFO - Stopped measurement on unit nl43-1
+2025-12-25 01:33:44,492 - app.services - INFO - Sending command to 63.45.161.30:2255: DLC?
+2025-12-25 01:33:44,661 - app.services - INFO - DLC data received from 63.45.161.30:2255: -.-, 44.9, 49.8, 45.3, 44.6, 45.2, 45.2, 44.7, 44.6, 44.6, 62.6,  -.-,  -.-,  -.-,0,0,  -.-,  -.-,  ...
+2025-12-25 01:33:44,661 - app.routers - INFO - Retrieved measurement results for unit nl43-1
+2025-12-25 01:33:50,918 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-25 01:33:51,105 - app.services - INFO - Parsed 64 data points from DOD response
+2025-12-25 01:33:51,116 - app.routers - INFO - Retrieved live status for unit nl43-1
+2025-12-25 01:33:53,814 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode?
+2025-12-25 01:33:54,131 - app.services - INFO - Sleep mode status on 63.45.161.30:2255: On
+2025-12-25 01:33:57,754 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode,Off
+2025-12-25 01:33:57,891 - app.services - INFO - Device 63.45.161.30:2255 waking from sleep mode
+2025-12-25 01:33:57,891 - app.routers - INFO - Woke device nl43-1 from sleep
+2025-12-25 01:34:03,988 - app.services - INFO - Sending command to 63.45.161.30:2255: Clock,2025/12/24,20:34:05
+2025-12-25 01:34:04,171 - app.services - ERROR - Communication error with 63.45.161.30:2255: Parameter error - invalid parameter value
+2025-12-25 01:34:04,171 - app.routers - ERROR - Failed to set clock for nl43-1: Parameter error - invalid parameter value
+2025-12-25 01:34:07,456 - app.services - INFO - Sending command to 63.45.161.30:2255: Frequency Weighting (Main)?
+2025-12-25 01:34:07,611 - app.services - INFO - Frequency weighting (Main) on 63.45.161.30:2255: A
+2025-12-25 01:34:09,997 - app.routers - INFO - WebSocket connection accepted for unit nl43-1
+2025-12-25 01:34:09,998 - app.routers - INFO - Starting DRD stream for unit nl43-1
+2025-12-25 01:34:09,998 - app.services - INFO - Starting DRD stream for 63.45.161.30:2255
+2025-12-25 01:34:10,251 - app.services - INFO - DRD stream started successfully for 63.45.161.30:2255
+2025-12-25 01:34:14,195 - app.services - INFO - Sending command to 63.45.161.30:2255: Frequency Weighting (Main)?
+2025-12-25 01:34:19,195 - app.services - ERROR - Connection timeout to 63.45.161.30:2255
+2025-12-25 01:34:19,195 - app.services - INFO - Sending command to 63.45.161.30:2255: Time Weighting (Main)?
+2025-12-25 01:34:19,316 - app.routers - ERROR - Failed to send snapshot via WebSocket: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-25 01:34:19,316 - app.services - INFO - DRD stream ended for 63.45.161.30:2255
+2025-12-25 01:34:19,316 - app.routers - ERROR - Unexpected error in WebSocket stream for nl43-1: received 1005 (no status received [internal]); then sent 1005 (no status received [internal])
+2025-12-25 01:34:19,316 - app.routers - INFO - WebSocket stream closed for unit nl43-1
+2025-12-25 01:34:24,195 - app.services - ERROR - Connection timeout to 63.45.161.30:2255
+2025-12-25 01:34:24,196 - app.services - INFO - Sending command to 63.45.161.30:2255: Measurement Time Preset Manual?
+2025-12-25 01:34:25,196 - app.services - INFO - Sending command to 63.45.161.30:2255: Leq Calculation Interval Preset?
+2025-12-25 01:34:26,196 - app.services - INFO - Sending command to 63.45.161.30:2255: Lp Store Interval?
+2025-12-25 01:34:27,196 - app.services - INFO - Sending command to 63.45.161.30:2255: Index Number?
+2025-12-25 01:34:28,196 - app.services - INFO - Sending command to 63.45.161.30:2255: Battery Level?
+2025-12-25 01:34:28,491 - app.services - INFO - Battery level on 63.45.161.30:2255: Full
+2025-12-25 01:34:29,197 - app.services - INFO - Sending command to 63.45.161.30:2255: Clock?
+2025-12-25 01:34:29,451 - app.services - INFO - Clock on 63.45.161.30:2255: 2025/12/24 21:33:50
+2025-12-25 01:34:30,196 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode?
+2025-12-25 01:34:30,331 - app.services - INFO - Sleep mode status on 63.45.161.30:2255: Off
+2025-12-25 01:34:31,197 - app.services - INFO - Sending command to 63.45.161.30:2255: FTP?
+2025-12-25 01:34:31,451 - app.services - INFO - FTP status on 63.45.161.30:2255: On
+2025-12-25 01:34:31,451 - app.services - INFO - Retrieved all settings for 63.45.161.30:2255
+2025-12-25 01:34:31,452 - app.routers - INFO - Retrieved all settings for unit nl43-1
