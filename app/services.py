@@ -465,6 +465,146 @@ class NL43Client:
 
             logger.info(f"DRD stream ended for {self.device_key}")
 
+    async def set_measurement_time(self, preset: str):
+        """Set measurement time preset.
+
+        Args:
+            preset: Time preset (10s, 1m, 5m, 10m, 15m, 30m, 1h, 8h, 24h, or custom like "00:05:30")
+        """
+        await self._send_command(f"Measurement Time Preset Manual,{preset}\r\n")
+        logger.info(f"Set measurement time to {preset} on {self.device_key}")
+
+    async def get_measurement_time(self) -> str:
+        """Get current measurement time preset.
+
+        Returns: Current time preset setting
+        """
+        resp = await self._send_command("Measurement Time Preset Manual?\r\n")
+        return resp.strip()
+
+    async def set_leq_interval(self, preset: str):
+        """Set Leq calculation interval preset.
+
+        Args:
+            preset: Interval preset (Off, 10s, 1m, 5m, 10m, 15m, 30m, 1h, 8h, 24h, or custom like "00:05:30")
+        """
+        await self._send_command(f"Leq Calculation Interval Preset,{preset}\r\n")
+        logger.info(f"Set Leq interval to {preset} on {self.device_key}")
+
+    async def get_leq_interval(self) -> str:
+        """Get current Leq calculation interval preset.
+
+        Returns: Current interval preset setting
+        """
+        resp = await self._send_command("Leq Calculation Interval Preset?\r\n")
+        return resp.strip()
+
+    async def set_lp_interval(self, preset: str):
+        """Set Lp store interval.
+
+        Args:
+            preset: Store interval (Off, 10ms, 25ms, 100ms, 200ms, 1s)
+        """
+        await self._send_command(f"Lp Store Interval,{preset}\r\n")
+        logger.info(f"Set Lp interval to {preset} on {self.device_key}")
+
+    async def get_lp_interval(self) -> str:
+        """Get current Lp store interval.
+
+        Returns: Current store interval setting
+        """
+        resp = await self._send_command("Lp Store Interval?\r\n")
+        return resp.strip()
+
+    async def set_index_number(self, index: int):
+        """Set index number for file numbering.
+
+        Args:
+            index: Index number (0000-9999)
+        """
+        if not 0 <= index <= 9999:
+            raise ValueError("Index must be between 0000 and 9999")
+        await self._send_command(f"Index Number,{index:04d}\r\n")
+        logger.info(f"Set index number to {index:04d} on {self.device_key}")
+
+    async def get_index_number(self) -> str:
+        """Get current index number.
+
+        Returns: Current index number
+        """
+        resp = await self._send_command("Index Number?\r\n")
+        return resp.strip()
+
+    async def get_all_settings(self) -> dict:
+        """Query all device settings for verification.
+
+        Returns: Dictionary with all current device settings
+        """
+        settings = {}
+
+        # Measurement settings
+        try:
+            settings["measurement_state"] = await self.get_measurement_state()
+        except Exception as e:
+            settings["measurement_state"] = f"Error: {e}"
+
+        try:
+            settings["frequency_weighting"] = await self.get_frequency_weighting()
+        except Exception as e:
+            settings["frequency_weighting"] = f"Error: {e}"
+
+        try:
+            settings["time_weighting"] = await self.get_time_weighting()
+        except Exception as e:
+            settings["time_weighting"] = f"Error: {e}"
+
+        # Timing/interval settings
+        try:
+            settings["measurement_time"] = await self.get_measurement_time()
+        except Exception as e:
+            settings["measurement_time"] = f"Error: {e}"
+
+        try:
+            settings["leq_interval"] = await self.get_leq_interval()
+        except Exception as e:
+            settings["leq_interval"] = f"Error: {e}"
+
+        try:
+            settings["lp_interval"] = await self.get_lp_interval()
+        except Exception as e:
+            settings["lp_interval"] = f"Error: {e}"
+
+        try:
+            settings["index_number"] = await self.get_index_number()
+        except Exception as e:
+            settings["index_number"] = f"Error: {e}"
+
+        # Device info
+        try:
+            settings["battery_level"] = await self.get_battery_level()
+        except Exception as e:
+            settings["battery_level"] = f"Error: {e}"
+
+        try:
+            settings["clock"] = await self.get_clock()
+        except Exception as e:
+            settings["clock"] = f"Error: {e}"
+
+        # Sleep mode
+        try:
+            settings["sleep_mode"] = await self.get_sleep_status()
+        except Exception as e:
+            settings["sleep_mode"] = f"Error: {e}"
+
+        # FTP status
+        try:
+            settings["ftp_status"] = await self.get_ftp_status()
+        except Exception as e:
+            settings["ftp_status"] = f"Error: {e}"
+
+        logger.info(f"Retrieved all settings for {self.device_key}")
+        return settings
+
     async def enable_ftp(self):
         """Enable FTP server on the device.
 

@@ -57,6 +57,7 @@
 
   <fieldset>
     <legend>Measurement Settings</legend>
+    <button onclick="getAllSettings()" style="margin-bottom: 12px; font-weight: bold;">Get ALL Settings</button>
     <div style="margin-bottom: 8px;">
       <label style="display: inline; margin-right: 8px;">Frequency Weighting:</label>
       <button onclick="getFreqWeighting()">Get</button>
@@ -280,6 +281,29 @@
     }
 
     // Measurement settings functions
+    async function getAllSettings() {
+      const unitId = document.getElementById('unitId').value;
+      log('Retrieving all device settings (this may take 10-15 seconds)...');
+
+      const res = await fetch(`/api/nl43/${unitId}/settings`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        log(`Get All Settings failed: ${res.status} - ${data.detail || JSON.stringify(data)}`);
+        return;
+      }
+
+      // Display in status area
+      statusEl.textContent = JSON.stringify(data.settings, null, 2);
+
+      // Log summary
+      log('=== ALL DEVICE SETTINGS ===');
+      Object.entries(data.settings).forEach(([key, value]) => {
+        log(`${key}: ${value}`);
+      });
+      log('===========================');
+    }
+
     async function getFreqWeighting() {
       const unitId = document.getElementById('unitId').value;
       const res = await fetch(`/api/nl43/${unitId}/frequency-weighting?channel=Main`);

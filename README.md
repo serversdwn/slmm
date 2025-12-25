@@ -131,6 +131,7 @@ Logs are written to:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| GET | `/api/nl43/{unit_id}/settings` | Get all current device settings for verification |
 | GET | `/api/nl43/{unit_id}/frequency-weighting` | Get frequency weighting (A/C/Z) |
 | PUT | `/api/nl43/{unit_id}/frequency-weighting` | Set frequency weighting |
 | GET | `/api/nl43/{unit_id}/time-weighting` | Get time weighting (F/S/I) |
@@ -253,6 +254,32 @@ curl -X POST http://localhost:8100/api/nl43/meter-001/start
 ### Get Live Status
 ```bash
 curl http://localhost:8100/api/nl43/meter-001/live
+```
+
+### Verify Device Settings
+```bash
+curl http://localhost:8100/api/nl43/meter-001/settings
+```
+
+This returns all current device configuration:
+```json
+{
+  "status": "ok",
+  "unit_id": "meter-001",
+  "settings": {
+    "measurement_state": "Stop",
+    "frequency_weighting": "A",
+    "time_weighting": "F",
+    "measurement_time": "00:01:00",
+    "leq_interval": "1s",
+    "lp_interval": "125ms",
+    "index_number": "0",
+    "battery_level": "100%",
+    "clock": "2025/12/24,20:45:30",
+    "sleep_mode": "Off",
+    "ftp_status": "On"
+  }
+}
 ```
 
 ### Stream Real-time Data (JavaScript)

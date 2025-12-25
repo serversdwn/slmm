@@ -725,6 +725,42 @@ async def get_ftp_status(unit_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Failed to get FTP status: {str(e)}")
 
 
+@router.get("/{unit_id}/settings")
+async def get_all_settings(unit_id: str, db: Session = Depends(get_db)):
+    """Get all current device settings for verification.
+
+    Returns a comprehensive view of all device configuration including:
+    - Measurement state and weightings
+    - Timing and interval settings
+    - Battery level and clock
+    - Sleep and FTP status
+
+    This is useful for verifying device configuration before starting measurements.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        settings = await client.get_all_settings()
+        logger.info(f"Retrieved all settings for unit {unit_id}")
+        return {"status": "ok", "unit_id": unit_id, "settings": settings}
+
+    except ConnectionError as e:
+        logger.error(f"Failed to get settings for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to communicate with device")
+    except TimeoutError:
+        logger.error(f"Timeout getting settings for {unit_id}")
+        raise HTTPException(status_code=504, detail="Device communication timeout")
+    except Exception as e:
+        logger.error(f"Unexpected error getting settings for {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @router.get("/{unit_id}/ftp/files")
 async def list_ftp_files(unit_id: str, path: str = "/", db: Session = Depends(get_db)):
     """List files on the device via FTP.
@@ -746,6 +782,14 @@ async def list_ftp_files(unit_id: str, path: str = "/", db: Session = Depends(ge
     except Exception as e:
         logger.error(f"Unexpected error listing FTP files on {unit_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+class TimingPayload(BaseModel):
+    preset: str
+
+
+class IndexPayload(BaseModel):
+    index: int
 
 
 class DownloadRequest(BaseModel):
@@ -790,3 +834,178 @@ async def download_ftp_file(unit_id: str, payload: DownloadRequest, db: Session 
     except Exception as e:
         logger.error(f"Unexpected error downloading file from {unit_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# Timing/Interval Configuration Endpoints
+
+@router.get("/{unit_id}/measurement-time")
+async def get_measurement_time(unit_id: str, db: Session = Depends(get_db)):
+    """Get current measurement time preset."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        preset = await client.get_measurement_time()
+        return {"status": "ok", "measurement_time": preset}
+    except Exception as e:
+        logger.error(f"Failed to get measurement time for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.put("/{unit_id}/measurement-time")
+async def set_measurement_time(unit_id: str, payload: TimingPayload, db: Session = Depends(get_db)):
+    """Set measurement time preset (10s, 1m, 5m, 10m, 15m, 30m, 1h, 8h, 24h, or custom like 00:05:30)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.set_measurement_time(payload.preset)
+        return {"status": "ok", "message": f"Measurement time set to {payload.preset}"}
+    except Exception as e:
+        logger.error(f"Failed to set measurement time for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/leq-interval")
+async def get_leq_interval(unit_id: str, db: Session = Depends(get_db)):
+    """Get current Leq calculation interval preset."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        preset = await client.get_leq_interval()
+        return {"status": "ok", "leq_interval": preset}
+    except Exception as e:
+        logger.error(f"Failed to get Leq interval for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.put("/{unit_id}/leq-interval")
+async def set_leq_interval(unit_id: str, payload: TimingPayload, db: Session = Depends(get_db)):
+    """Set Leq calculation interval preset (Off, 10s, 1m, 5m, 10m, 15m, 30m, 1h, 8h, 24h, or custom like 00:05:30)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.set_leq_interval(payload.preset)
+        return {"status": "ok", "message": f"Leq interval set to {payload.preset}"}
+    except Exception as e:
+        logger.error(f"Failed to set Leq interval for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/lp-interval")
+async def get_lp_interval(unit_id: str, db: Session = Depends(get_db)):
+    """Get current Lp store interval."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        preset = await client.get_lp_interval()
+        return {"status": "ok", "lp_interval": preset}
+    except Exception as e:
+        logger.error(f"Failed to get Lp interval for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.put("/{unit_id}/lp-interval")
+async def set_lp_interval(unit_id: str, payload: TimingPayload, db: Session = Depends(get_db)):
+    """Set Lp store interval (Off, 10ms, 25ms, 100ms, 200ms, 1s)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.set_lp_interval(payload.preset)
+        return {"status": "ok", "message": f"Lp interval set to {payload.preset}"}
+    except Exception as e:
+        logger.error(f"Failed to set Lp interval for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/index-number")
+async def get_index_number(unit_id: str, db: Session = Depends(get_db)):
+    """Get current index number for file numbering."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        index = await client.get_index_number()
+        return {"status": "ok", "index_number": index}
+    except Exception as e:
+        logger.error(f"Failed to get index number for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.put("/{unit_id}/index-number")
+async def set_index_number(unit_id: str, payload: IndexPayload, db: Session = Depends(get_db)):
+    """Set index number for file numbering (0000-9999)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        await client.set_index_number(payload.index)
+        return {"status": "ok", "message": f"Index number set to {payload.index:04d}"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Failed to set index number for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/settings/all")
+async def get_all_settings(unit_id: str, db: Session = Depends(get_db)):
+    """Get all device settings for verification."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        settings = await client.get_all_settings()
+        return {"status": "ok", "settings": settings}
+    except Exception as e:
+        logger.error(f"Failed to get all settings for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))

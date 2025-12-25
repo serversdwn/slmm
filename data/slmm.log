@@ -594,3 +594,18 @@
 2025-12-24 06:46:07,062 - app.services - INFO - Sending command to 63.45.161.30:2255: Sleep Mode,On
 2025-12-24 06:46:07,221 - app.services - INFO - Device 63.45.161.30:2255 entering sleep mode
 2025-12-24 06:46:07,222 - app.routers - INFO - Put device nl43-1 to sleep
+2025-12-24 07:24:24,390 - app.services - INFO - Sending command to 63.45.161.30:2255: DOD?
+2025-12-24 07:24:29,391 - app.services - ERROR - Connection timeout to 63.45.161.30:2255
+2025-12-24 07:24:29,391 - app.routers - ERROR - Failed to get live status for nl43-1: Failed to connect to device at 63.45.161.30:2255
+2025-12-24 20:37:45,341 - app.main - INFO - Database tables initialized
+2025-12-24 20:37:45,342 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 20:38:04,141 - app.main - INFO - Database tables initialized
+2025-12-24 20:38:04,142 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 20:38:40,693 - app.main - INFO - Database tables initialized
+2025-12-24 20:38:40,693 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 20:39:08,484 - app.main - INFO - Database tables initialized
+2025-12-24 20:39:08,484 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 21:22:06,678 - app.main - INFO - Database tables initialized
+2025-12-24 21:22:06,679 - app.main - INFO - CORS allowed origins: ['*']
+2025-12-24 21:22:38,825 - app.main - INFO - Database tables initialized
+2025-12-24 21:22:38,825 - app.main - INFO - CORS allowed origins: ['*']

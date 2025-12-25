@@ -240,6 +240,210 @@ Sets the time weighting.
 - `S` - Slow (1s)
 - `I` - Impulse (35ms)
 
+## Timing and Interval Configuration
+
+### Get Measurement Time
+```
+GET /{unit_id}/measurement-time
+```
+Gets the current measurement time preset.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "measurement_time": "1h"
+}
+```
+
+### Set Measurement Time
+```
+PUT /{unit_id}/measurement-time
+```
+Sets the measurement time preset.
+
+**Request Body:**
+```json
+{
+  "preset": "1h"
+}
+```
+
+**Preset Values:**
+- `10s`, `1m`, `5m`, `10m`, `15m`, `30m`, `1h`, `8h`, `24h`
+- Custom format: `HH:MM:SS` (e.g., `00:05:30` for 5.5 minutes)
+
+### Get Leq Calculation Interval
+```
+GET /{unit_id}/leq-interval
+```
+Gets the current Leq calculation interval.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "leq_interval": "1m"
+}
+```
+
+### Set Leq Calculation Interval
+```
+PUT /{unit_id}/leq-interval
+```
+Sets the Leq calculation interval preset.
+
+**Request Body:**
+```json
+{
+  "preset": "1m"
+}
+```
+
+**Preset Values:**
+- `Off`, `10s`, `1m`, `5m`, `10m`, `15m`, `30m`, `1h`, `8h`, `24h`
+- Custom format: `HH:MM:SS` (e.g., `00:05:30` for 5.5 minutes)
+
+### Get Lp Store Interval
+```
+GET /{unit_id}/lp-interval
+```
+Gets the current Lp store interval.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "lp_interval": "1s"
+}
+```
+
+### Set Lp Store Interval
+```
+PUT /{unit_id}/lp-interval
+```
+Sets the Lp store interval.
+
+**Request Body:**
+```json
+{
+  "preset": "1s"
+}
+```
+
+**Preset Values:**
+- `Off`, `10ms`, `25ms`, `100ms`, `200ms`, `1s`
+
+### Get Index Number
+```
+GET /{unit_id}/index-number
+```
+Gets the current index number for file numbering.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "index_number": "0042"
+}
+```
+
+### Set Index Number
+```
+PUT /{unit_id}/index-number
+```
+Sets the index number for file numbering. This number is incremented with each measurement and used in file names.
+
+**Request Body:**
+```json
+{
+  "index": 42
+}
+```
+
+**Valid Range:** 0000 to 9999
+
+## Device Settings Query
+
+### Get All Settings
+```
+GET /{unit_id}/settings/all
+```
+Retrieves all current device settings for verification. This is useful for confirming device configuration before starting measurements.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "settings": {
+    "measurement_state": "Stop",
+    "frequency_weighting": "A",
+    "time_weighting": "F",
+    "measurement_time": "1h",
+    "leq_interval": "1m",
+    "lp_interval": "1s",
+    "index_number": "0042",
+    "battery_level": "80",
+    "clock": "2025/12/24,02:30:15",
+    "sleep_mode": "Off",
+    "ftp_status": "Off"
+  }
+}
+```
+
+**Note:** If any setting query fails, the error message will be included in the response for that setting (e.g., `"frequency_weighting": "Error: Connection timeout"`).
+
+## Data Retrieval
+
+### Get Final Results
+```
+GET /{unit_id}/results
+```
+Retrieves the final calculation results (DLC) from the last completed measurement.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "data": {
+    "leq": "68.4",
+    "lmax": "82.1",
+    "lmin": "42.3",
+    "lpeak": "89.5"
+  }
+}
+```
+
+## Power Management
+
+### Sleep Device
+```
+POST /{unit_id}/sleep
+```
+Enables Sleep Mode on the device. When enabled, the device will automatically enter sleep mode between Timer Auto measurements.
+
+**Note:** This is a SETTING, not a command to sleep immediately. Sleep Mode only applies when using Timer Auto measurements.
+
+### Wake Device
+```
+POST /{unit_id}/wake
+```
+Disables Sleep Mode on the device.
+
+### Get Sleep Status
+```
+GET /{unit_id}/sleep/status
+```
+Gets the current Sleep Mode status.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "sleep_mode": "Off"
+}
+```
+
 ## FTP File Management
 
 ### Enable FTP
@@ -344,8 +548,46 @@ All endpoints return standard HTTP status codes:
 ### Terra-view Integration Example
 
 ```javascript
-// Get live status from all devices
 const devices = ['nl43-1', 'nl43-2', 'nl43-3'];
+
+// Configure all devices before measurement
+for (const device of devices) {
+  // Set measurement time to 12 hours
+  await fetch(`http://localhost:8000/api/nl43/${device}/measurement-time`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ preset: '12h' })
+  });
+
+  // Set Leq interval to 1 minute
+  await fetch(`http://localhost:8000/api/nl43/${device}/leq-interval`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ preset: '1m' })
+  });
+
+  // Set index number for daily file organization
+  const dayNumber = new Date().getDate();
+  await fetch(`http://localhost:8000/api/nl43/${device}/index-number`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ index: dayNumber })
+  });
+
+  // Verify all settings are correct
+  const settings = await fetch(`http://localhost:8000/api/nl43/${device}/settings/all`)
+    .then(r => r.json());
+  console.log(`Device ${device} settings:`, settings.settings);
+}
+
+// Start measurement on all devices at 7pm
+await Promise.all(
+  devices.map(id =>
+    fetch(`http://localhost:8000/api/nl43/${id}/start`, { method: 'POST' })
+  )
+);
+
+// Get live status from all devices
 const statuses = await Promise.all(
   devices.map(id =>
     fetch(`http://localhost:8000/api/nl43/${id}/live`)
@@ -353,25 +595,18 @@ const statuses = await Promise.all(
   )
 );
 
-// Start measurement on all devices
-await Promise.all(
-  devices.map(id =>
-    fetch(`http://localhost:8000/api/nl43/${id}/start`, { method: 'POST' })
-  )
-);
-
-// Download latest files from all devices
+// Download files from all devices the next morning
 for (const device of devices) {
   // Enable FTP
   await fetch(`http://localhost:8000/api/nl43/${device}/ftp/enable`, {
     method: 'POST'
   });
 
-  // List files
+  // List files in device data directory
   const res = await fetch(`http://localhost:8000/api/nl43/${device}/ftp/files?path=/NL43_DATA`);
   const { files } = await res.json();
 
-  // Download latest file
+  // Download latest measurement file
   const latestFile = files
     .filter(f => !f.is_dir)
     .sort((a, b) => b.modified - a.modified)[0];
@@ -384,10 +619,10 @@ for (const device of devices) {
     });
 
     const blob = await download.blob();
-    // Process blob...
+    // Save to local storage or process...
   }
 
-  // Disable FTP, re-enable TCP
+  // Disable FTP to re-enable TCP
   await fetch(`http://localhost:8000/api/nl43/${device}/ftp/disable`, {
     method: 'POST'
   });
