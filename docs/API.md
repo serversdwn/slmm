@@ -120,6 +120,27 @@ POST /{unit_id}/reset
 ```
 Resets the measurement data.
 
+### Get Measurement State
+```
+GET /{unit_id}/measurement-state
+```
+Gets the current measurement state to determine if the device is actively measuring.
+
+**Response:**
+```json
+{
+  "status": "ok",
+  "measurement_state": "Start",
+  "is_measuring": true
+}
+```
+
+**Values:**
+- `measurement_state`: "Start" (measuring) or "Stop" (not measuring)
+- `is_measuring`: Boolean convenience field (true if measuring, false otherwise)
+
+**Note:** Elapsed time and interval counts are displayed on the device OSD but not available via command. Track elapsed time in your application by recording the start time when you call the `/start` endpoint.
+
 ### Manual Store
 ```
 POST /{unit_id}/store

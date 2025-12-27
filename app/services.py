@@ -253,6 +253,16 @@ class NL43Client:
         await self._send_command("Reset\r\n")
         logger.info(f"Measurement data reset on {self.device_key}")
 
+    async def get_measurement_state(self) -> str:
+        """Get the current measurement state.
+
+        Returns: "Start" if measuring, "Stop" if stopped
+        """
+        resp = await self._send_command("Measure?\r\n")
+        state = resp.strip()
+        logger.info(f"Measurement state on {self.device_key}: {state}")
+        return state
+
     async def get_battery_level(self) -> str:
         """Get the battery level."""
         resp = await self._send_command("Battery Level?\r\n")
