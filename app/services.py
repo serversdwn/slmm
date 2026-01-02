@@ -279,10 +279,13 @@ class NL43Client:
         """Set the device clock time.
 
         Args:
-            datetime_str: Time in format YYYY/MM/DD,HH:MM:SS
+            datetime_str: Time in format YYYY/MM/DD,HH:MM:SS or YYYY/MM/DD HH:MM:SS
         """
-        await self._send_command(f"Clock,{datetime_str}\r\n")
-        logger.info(f"Clock set on {self.device_key} to {datetime_str}")
+        # Device expects format: Clock,YYYY/MM/DD HH:MM:SS (space between date and time)
+        # Replace comma with space if present to normalize format
+        normalized = datetime_str.replace(',', ' ', 1)
+        await self._send_command(f"Clock,{normalized}\r\n")
+        logger.info(f"Clock set on {self.device_key} to {normalized}")
 
     async def get_frequency_weighting(self, channel: str = "Main") -> str:
         """Get frequency weighting (A, C, Z, etc.).

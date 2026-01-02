@@ -7,15 +7,37 @@
   <style>
     body { font-family: system-ui, -apple-system, sans-serif; margin: 24px; max-width: 900px; }
     fieldset { margin-bottom: 16px; padding: 12px; }
+    legend { font-weight: 600; }
     label { display: block; margin-bottom: 6px; font-weight: 600; }
     input { width: 100%; padding: 8px; margin-bottom: 10px; }
     button { padding: 8px 12px; margin-right: 8px; }
     #log { background: #f6f8fa; border: 1px solid #d0d7de; padding: 12px; min-height: 120px; white-space: pre-wrap; }
+    .diagnostic-item { margin: 8px 0; padding: 8px; border-left: 4px solid #888; background: #f6f8fa; }
+    .diagnostic-item.pass { border-left-color: #0a0; }
+    .diagnostic-item.fail { border-left-color: #d00; }
+    .diagnostic-item.warning { border-left-color: #fa0; }
+    .diagnostic-item.skip { border-left-color: #888; }
+    .diagnostic-status { font-weight: 600; margin-right: 8px; text-transform: uppercase; font-size: 0.85em; }
+    .diagnostic-status.pass { color: #0a0; }
+    .diagnostic-status.fail { color: #d00; }
+    .diagnostic-status.warning { color: #fa0; }
+    .diagnostic-status.skip { color: #888; }
+    #diagnosticsSummary { font-size: 1.1em; font-weight: 600; margin-bottom: 12px; padding: 8px; border-radius: 4px; }
+    #diagnosticsSummary.pass { background: #d4edda; color: #155724; }
+    #diagnosticsSummary.fail { background: #f8d7da; color: #721c24; }
+    #diagnosticsSummary.degraded { background: #fff3cd; color: #856404; }
   </style>
 </head>
 <body>
   <h1>SLMM NL43 Standalone</h1>
   <p>Configure a unit (host/port), then use controls to Start/Stop and fetch live status.</p>
+
+  <fieldset>
+    <legend>🔍 Connection Diagnostics</legend>
+    <button onclick="runDiagnostics()">Run Diagnostics</button>
+    <button onclick="clearDiagnostics()">Clear</button>
+    <div id="diagnosticsResults" style="margin-top: 12px;"></div>
+  </fieldset>
 
   <fieldset>
     <legend>Unit Config</legend>
@@ -25,7 +47,26 @@
     <input id="host" value="127.0.0.1" />
     <label>Port</label>
     <input id="port" type="number" value="80" />
-    <button onclick="saveConfig()">Save Config</button>
+
+    <div style="margin: 12px 0;">
+      <label style="display: inline-flex; align-items: center; margin-right: 16px;">
+        <input type="checkbox" id="tcpEnabled" checked style="width: auto; margin-right: 6px;" />
+        TCP Enabled
+      </label>
+      <label style="display: inline-flex; align-items: center;">
+        <input type="checkbox" id="ftpEnabled" style="width: auto; margin-right: 6px;" />
+        FTP Enabled
+      </label>
+    </div>
+
+    <div id="ftpCredentials" style="display: none; margin-top: 12px; padding: 12px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px;">
+      <label>FTP Username</label>
+      <input id="ftpUsername" value="USER" />
+      <label>FTP Password</label>
+      <input id="ftpPassword" type="password" value="0000" />
+    </div>
+
+    <button onclick="saveConfig()" style="margin-top: 12px;">Save Config</button>
     <button onclick="loadConfig()">Load Config</button>
   </fieldset>
 
@@ -113,14 +154,108 @@
       logEl.scrollTop = logEl.scrollHeight;
     }
 
+    function toggleFtpCredentials() {
+      const ftpEnabled = document.getElementById('ftpEnabled').checked;
+      const ftpCredentials = document.getElementById('ftpCredentials');
+      ftpCredentials.style.display = ftpEnabled ? 'block' : 'none';
+    }
+
+    // Add event listener for FTP checkbox
+    document.addEventListener('DOMContentLoaded', function() {
+      document.getElementById('ftpEnabled').addEventListener('change', toggleFtpCredentials);
+    });
+
+    async function runDiagnostics() {
+      const unitId = document.getElementById('unitId').value;
+      const resultsEl = document.getElementById('diagnosticsResults');
+
+      resultsEl.innerHTML = '<p style="color: #888;">Running diagnostics...</p>';
+      log('Running diagnostics...');
+
+      try {
+        const res = await fetch(`/api/nl43/${unitId}/diagnostics`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          resultsEl.innerHTML = `<p style="color: #d00;">Diagnostics failed: ${data.detail || 'Unknown error'}</p>`;
+          log(`Diagnostics failed: ${res.status}`);
+          return;
+        }
+
+        // Build results HTML
+        let html = '';
+
+        // Overall status summary
+        const statusText = {
+          'pass': '✓ All systems operational',
+          'fail': '✗ Connection failed',
+          'degraded': '⚠ Partial connectivity'
+        };
+
+        html += `<div id="diagnosticsSummary" class="${data.overall_status}">`;
+        html += statusText[data.overall_status] || data.overall_status;
+        html += `</div>`;
+
+        // Individual test results
+        const testNames = {
+          'config_exists': '📋 Configuration',
+          'tcp_enabled': '🔌 TCP Enabled',
+          'modem_reachable': '📡 Modem/Router Reachable',
+          'tcp_connection': '🌐 Device Port Connection',
+          'command_response': '💬 Device Response',
+          'ftp_status': '📁 FTP Status'
+        };
+
+        for (const [testKey, testResult] of Object.entries(data.tests)) {
+          const testName = testNames[testKey] || testKey;
+          html += `<div class="diagnostic-item ${testResult.status}">`;
+          html += `<span class="diagnostic-status ${testResult.status}">${testResult.status}</span>`;
+          html += `<strong>${testName}:</strong> ${testResult.message}`;
+          html += `</div>`;
+        }
+
+        html += `<p style="margin-top: 12px; font-size: 0.9em; color: #666;">Last run: ${new Date(data.timestamp).toLocaleString()}</p>`;
+
+        resultsEl.innerHTML = html;
+        log(`Diagnostics complete: ${data.overall_status}`);
+
+      } catch (err) {
+        resultsEl.innerHTML = `<p style="color: #d00;">Error running diagnostics: ${err.message}</p>`;
+        log(`Diagnostics error: ${err.message}`);
+      }
+    }
+
+    function clearDiagnostics() {
+      document.getElementById('diagnosticsResults').innerHTML = '';
+      log('Diagnostics cleared');
+    }
+
     async function saveConfig() {
       const unitId = document.getElementById('unitId').value;
       const host = document.getElementById('host').value;
       const port = parseInt(document.getElementById('port').value, 10);
+      const tcpEnabled = document.getElementById('tcpEnabled').checked;
+      const ftpEnabled = document.getElementById('ftpEnabled').checked;
+      const ftpUsername = document.getElementById('ftpUsername').value;
+      const ftpPassword = document.getElementById('ftpPassword').value;
+
+      const config = {
+        host,
+        tcp_port: port,
+        tcp_enabled: tcpEnabled,
+        ftp_enabled: ftpEnabled
+      };
+
+      // Only include FTP credentials if FTP is enabled
+      if (ftpEnabled) {
+        config.ftp_username = ftpUsername;
+        config.ftp_password = ftpPassword;
+      }
+
       const res = await fetch(`/api/nl43/${unitId}/config`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ host, tcp_port: port })
+        body: JSON.stringify(config)
       });
       const data = await res.json();
       log(`Saved config: ${JSON.stringify(data)}`);
@@ -137,6 +272,12 @@
       const data = response.data;
       document.getElementById('host').value = data.host;
       document.getElementById('port').value = data.tcp_port;
+      document.getElementById('tcpEnabled').checked = data.tcp_enabled || false;
+      document.getElementById('ftpEnabled').checked = data.ftp_enabled || false;
+
+      // Show/hide FTP credentials based on FTP enabled status
+      toggleFtpCredentials();
+
       log(`Loaded config: ${JSON.stringify(data)}`);
     }
 

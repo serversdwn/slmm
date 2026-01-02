@@ -440,7 +440,7 @@ async def get_clock(unit_id: str, db: Session = Depends(get_db)):
 
 
 class ClockPayload(BaseModel):
-    datetime: str  # Format: YYYY/MM/DD,HH:MM:SS
+    datetime: str  # Format: YYYY/MM/DD,HH:MM:SS or YYYY/MM/DD HH:MM:SS (both accepted)
 
 
 @router.put("/{unit_id}/clock")
@@ -1033,3 +1033,173 @@ async def get_all_settings(unit_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Failed to get all settings for {unit_id}: {e}")
         raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/diagnostics")
+async def run_diagnostics(unit_id: str, db: Session = Depends(get_db)):
+    """Run comprehensive diagnostics on device connection and capabilities.
+
+    Tests:
+    - Configuration exists
+    - TCP connection reachable
+    - Device responds to commands
+    - FTP status (if enabled)
+    """
+    import asyncio
+
+    diagnostics = {
+        "unit_id": unit_id,
+        "timestamp": datetime.now().isoformat(),
+        "tests": {}
+    }
+
+    # Test 1: Configuration exists
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        diagnostics["tests"]["config_exists"] = {
+            "status": "fail",
+            "message": "Unit configuration not found in database"
+        }
+        diagnostics["overall_status"] = "fail"
+        return diagnostics
+
+    diagnostics["tests"]["config_exists"] = {
+        "status": "pass",
+        "message": f"Configuration found: {cfg.host}:{cfg.tcp_port}"
+    }
+
+    # Test 2: TCP enabled
+    if not cfg.tcp_enabled:
+        diagnostics["tests"]["tcp_enabled"] = {
+            "status": "fail",
+            "message": "TCP communication is disabled in configuration"
+        }
+        diagnostics["overall_status"] = "fail"
+        return diagnostics
+
+    diagnostics["tests"]["tcp_enabled"] = {
+        "status": "pass",
+        "message": "TCP communication enabled"
+    }
+
+    # Test 3: Modem/Router reachable (check port 443 HTTPS)
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(cfg.host, 443), timeout=3.0
+        )
+        writer.close()
+        await writer.wait_closed()
+        diagnostics["tests"]["modem_reachable"] = {
+            "status": "pass",
+            "message": f"Modem/router reachable at {cfg.host}"
+        }
+    except asyncio.TimeoutError:
+        diagnostics["tests"]["modem_reachable"] = {
+            "status": "fail",
+            "message": f"Modem/router timeout at {cfg.host} (network issue)"
+        }
+        diagnostics["overall_status"] = "fail"
+        return diagnostics
+    except ConnectionRefusedError:
+        # Connection refused means host is up but port 443 closed - that's ok
+        diagnostics["tests"]["modem_reachable"] = {
+            "status": "pass",
+            "message": f"Modem/router reachable at {cfg.host} (HTTPS closed)"
+        }
+    except Exception as e:
+        diagnostics["tests"]["modem_reachable"] = {
+            "status": "fail",
+            "message": f"Cannot reach modem/router at {cfg.host}: {str(e)}"
+        }
+        diagnostics["overall_status"] = "fail"
+        return diagnostics
+
+    # Test 4: TCP connection reachable (device port)
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(cfg.host, cfg.tcp_port), timeout=3.0
+        )
+        writer.close()
+        await writer.wait_closed()
+        diagnostics["tests"]["tcp_connection"] = {
+            "status": "pass",
+            "message": f"TCP connection successful to {cfg.host}:{cfg.tcp_port}"
+        }
+    except asyncio.TimeoutError:
+        diagnostics["tests"]["tcp_connection"] = {
+            "status": "fail",
+            "message": f"Connection timeout to {cfg.host}:{cfg.tcp_port}"
+        }
+        diagnostics["overall_status"] = "fail"
+        return diagnostics
+    except ConnectionRefusedError:
+        diagnostics["tests"]["tcp_connection"] = {
+            "status": "fail",
+            "message": f"Connection refused by {cfg.host}:{cfg.tcp_port}"
+        }
+        diagnostics["overall_status"] = "fail"
+        return diagnostics
+    except Exception as e:
+        diagnostics["tests"]["tcp_connection"] = {
+            "status": "fail",
+            "message": f"Connection error: {str(e)}"
+        }
+        diagnostics["overall_status"] = "fail"
+        return diagnostics
+
+    # Wait a bit after connection test to let device settle
+    await asyncio.sleep(1.5)
+
+    # Test 5: Device responds to commands
+    # Use longer timeout to account for rate limiting (device requires ≥1s between commands)
+    client = NL43Client(cfg.host, cfg.tcp_port, timeout=10.0, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        battery = await client.get_battery_level()
+        diagnostics["tests"]["command_response"] = {
+            "status": "pass",
+            "message": f"Device responds to commands (Battery: {battery})"
+        }
+    except ConnectionError as e:
+        diagnostics["tests"]["command_response"] = {
+            "status": "fail",
+            "message": f"Device not responding to commands: {str(e)}"
+        }
+        diagnostics["overall_status"] = "degraded"
+        return diagnostics
+    except ValueError as e:
+        diagnostics["tests"]["command_response"] = {
+            "status": "fail",
+            "message": f"Invalid response from device: {str(e)}"
+        }
+        diagnostics["overall_status"] = "degraded"
+        return diagnostics
+    except Exception as e:
+        diagnostics["tests"]["command_response"] = {
+            "status": "fail",
+            "message": f"Command error: {str(e)}"
+        }
+        diagnostics["overall_status"] = "degraded"
+        return diagnostics
+
+    # Test 6: FTP status (if FTP is enabled in config)
+    if cfg.ftp_enabled:
+        try:
+            ftp_status = await client.get_ftp_status()
+            diagnostics["tests"]["ftp_status"] = {
+                "status": "pass" if ftp_status == "On" else "warning",
+                "message": f"FTP server status: {ftp_status}"
+            }
+        except Exception as e:
+            diagnostics["tests"]["ftp_status"] = {
+                "status": "warning",
+                "message": f"Could not query FTP status: {str(e)}"
+            }
+    else:
+        diagnostics["tests"]["ftp_status"] = {
+            "status": "skip",
+            "message": "FTP not enabled in configuration"
+        }
+
+    # All tests passed
+    diagnostics["overall_status"] = "pass"
+    return diagnostics
