@@ -652,11 +652,11 @@ async def stream_live(websocket: WebSocket, unit_id: str):
                     "unit_id": unit_id,
                     "timestamp": datetime.utcnow().isoformat(),
                     "measurement_state": snap.measurement_state,
-                    "lp": snap.lp,
-                    "leq": snap.leq,
-                    "lmax": snap.lmax,
-                    "lmin": snap.lmin,
-                    "lpeak": snap.lpeak,
+                    "lp": snap.lp,      # Instantaneous sound pressure level
+                    "leq": snap.leq,    # Equivalent continuous sound level
+                    "lmax": snap.lmax,  # Maximum level
+                    "lmin": snap.lmin,  # Minimum level
+                    "lpeak": snap.lpeak,  # Peak level
                     "raw_payload": snap.raw_payload,
                 })
             except Exception as e:

@@ -25,11 +25,11 @@ logger = logging.getLogger(__name__)
 class NL43Snapshot:
     unit_id: str
     measurement_state: str = "unknown"
-    lp: Optional[str] = None
-    leq: Optional[str] = None
-    lmax: Optional[str] = None
-    lmin: Optional[str] = None
-    lpeak: Optional[str] = None
+    lp: Optional[str] = None    # Instantaneous sound pressure level
+    leq: Optional[str] = None   # Equivalent continuous sound level
+    lmax: Optional[str] = None  # Maximum level
+    lmin: Optional[str] = None  # Minimum level
+    lpeak: Optional[str] = None  # Peak level
     battery_level: Optional[str] = None
     power_source: Optional[str] = None
     sd_remaining_mb: Optional[str] = None
@@ -188,19 +188,20 @@ class NL43Client:
 
         snap = NL43Snapshot(unit_id="", raw_payload=resp, measurement_state="Measure")
 
-        # Parse known positions (based on NL43 communication guide)
-        # DOD format: Main Lp, Main Leq, Main LE, Main Lmax, Main Lmin, LN1-5, Lpeak, LIeq, Leq,mov, Ltm5, flags...
+        # Parse known positions (based on NL43 communication guide - DRD format)
+        # DRD format: d0=counter, d1=Lp, d2=Leq, d3=Lmax, d4=Lmin, d5=Lpeak, d6=LIeq, ...
         try:
-            if len(parts) >= 1:
-                snap.lp = parts[0]
+            # Skip d0 (counter) - start from d1
             if len(parts) >= 2:
-                snap.leq = parts[1]
+                snap.lp = parts[1]     # d1: Instantaneous sound pressure level
+            if len(parts) >= 3:
+                snap.leq = parts[2]    # d2: Equivalent continuous sound level
             if len(parts) >= 4:
-                snap.lmax = parts[3]
+                snap.lmax = parts[3]   # d3: Maximum level
             if len(parts) >= 5:
-                snap.lmin = parts[4]
-            if len(parts) >= 11:
-                snap.lpeak = parts[10]
+                snap.lmin = parts[4]   # d4: Minimum level
+            if len(parts) >= 6:
+                snap.lpeak = parts[5]  # d5: Peak level
         except (IndexError, ValueError) as e:
             logger.warning(f"Error parsing DOD data points: {e}")
 
@@ -439,18 +440,20 @@ class NL43Client:
 
                     snap = NL43Snapshot(unit_id="", raw_payload=line, measurement_state="Measure")
 
-                    # Parse known positions
+                    # Parse known positions (DRD format - same as DOD)
+                    # DRD format: d0=counter, d1=Lp, d2=Leq, d3=Lmax, d4=Lmin, d5=Lpeak, d6=LIeq, ...
                     try:
-                        if len(parts) >= 1:
-                            snap.lp = parts[0]
+                        # Skip d0 (counter) - start from d1
                         if len(parts) >= 2:
-                            snap.leq = parts[1]
+                            snap.lp = parts[1]     # d1: Instantaneous sound pressure level
+                        if len(parts) >= 3:
+                            snap.leq = parts[2]    # d2: Equivalent continuous sound level
                         if len(parts) >= 4:
-                            snap.lmax = parts[3]
+                            snap.lmax = parts[3]   # d3: Maximum level
                         if len(parts) >= 5:
-                            snap.lmin = parts[4]
-                        if len(parts) >= 11:
-                            snap.lpeak = parts[10]
+                            snap.lmin = parts[4]   # d4: Minimum level
+                        if len(parts) >= 6:
+                            snap.lpeak = parts[5]  # d5: Peak level
                     except (IndexError, ValueError) as e:
                         logger.warning(f"Error parsing DRD data points: {e}")
 

@@ -29,11 +29,11 @@ class NL43Status(Base):
     unit_id = Column(String, primary_key=True, index=True)
     last_seen = Column(DateTime, default=func.now())
     measurement_state = Column(String, default="unknown")  # Measure/Stop
-    lp = Column(String, nullable=True)
-    leq = Column(String, nullable=True)
-    lmax = Column(String, nullable=True)
-    lmin = Column(String, nullable=True)
-    lpeak = Column(String, nullable=True)
+    lp = Column(String, nullable=True)    # Instantaneous sound pressure level
+    leq = Column(String, nullable=True)   # Equivalent continuous sound level
+    lmax = Column(String, nullable=True)  # Maximum level
+    lmin = Column(String, nullable=True)  # Minimum level
+    lpeak = Column(String, nullable=True)  # Peak level
     battery_level = Column(String, nullable=True)
     power_source = Column(String, nullable=True)
     sd_remaining_mb = Column(String, nullable=True)
