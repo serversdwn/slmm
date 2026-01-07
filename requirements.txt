@@ -3,3 +3,5 @@ uvicorn
 sqlalchemy
 pydantic
 aioftp
+jinja2
+websockets
