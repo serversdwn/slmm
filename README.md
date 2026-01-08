@@ -224,6 +224,7 @@ Caches latest measurement snapshot:
 - Uses active mode FTP (requires device to connect back)
 - TCP and FTP are mutually exclusive on the device
 - Credentials configurable per device
+- **Default NL43 FTP Credentials**: Username: `USER`, Password: `0000`
 
 ### Data Formats
 
@@ -241,8 +242,9 @@ curl -X PUT http://localhost:8100/api/nl43/meter-001/config \
     "host": "192.168.1.100",
     "tcp_port": 2255,
     "tcp_enabled": true,
-    "ftp_username": "admin",
-    "ftp_password": "password"
+    "ftp_enabled": true,
+    "ftp_username": "USER",
+    "ftp_password": "0000"
   }'
 ```
 

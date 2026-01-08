@@ -29,6 +29,8 @@ class NL43Status(Base):
     unit_id = Column(String, primary_key=True, index=True)
     last_seen = Column(DateTime, default=func.now())
     measurement_state = Column(String, default="unknown")  # Measure/Stop
+    measurement_start_time = Column(DateTime, nullable=True)  # When measurement started (UTC)
+    counter = Column(String, nullable=True)  # d0: Measurement interval counter (1-600)
     lp = Column(String, nullable=True)    # Instantaneous sound pressure level
     leq = Column(String, nullable=True)   # Equivalent continuous sound level
     lmax = Column(String, nullable=True)  # Maximum level

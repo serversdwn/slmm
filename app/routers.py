@@ -7,6 +7,7 @@ import logging
 import ipaddress
 import json
 import os
+import asyncio
 
 from app.database import get_db
 from app.models import NL43Config, NL43Status
@@ -195,6 +196,24 @@ async def start_measurement(unit_id: str, db: Session = Depends(get_db)):
     try:
         await client.start()
         logger.info(f"Started measurement on unit {unit_id}")
+
+        # Query device status to trigger state transition detection
+        # Retry a few times since device may take a moment to change state
+        for attempt in range(3):
+            logger.info(f"Querying device status (attempt {attempt + 1}/3)")
+            await asyncio.sleep(0.5)  # Wait 500ms between attempts
+            snap = await client.request_dod()
+            snap.unit_id = unit_id
+            persist_snapshot(snap, db)
+
+            # Refresh the session to see committed changes
+            db.expire_all()
+            status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
+            logger.info(f"State check: measurement_state={status.measurement_state if status else 'None'}, start_time={status.measurement_start_time if status else 'None'}")
+            if status and status.measurement_state == "Measure" and status.measurement_start_time:
+                logger.info(f"✓ Measurement state confirmed for {unit_id} with start time {status.measurement_start_time}")
+                break
+
     except ConnectionError as e:
         logger.error(f"Failed to start measurement on {unit_id}: {e}")
         raise HTTPException(status_code=502, detail="Failed to communicate with device")
@@ -220,6 +239,12 @@ async def stop_measurement(unit_id: str, db: Session = Depends(get_db)):
     try:
         await client.stop()
         logger.info(f"Stopped measurement on unit {unit_id}")
+
+        # Query device status to update database with "Stop" state
+        snap = await client.request_dod()
+        snap.unit_id = unit_id
+        persist_snapshot(snap, db)
+
     except ConnectionError as e:
         logger.error(f"Failed to stop measurement on {unit_id}: {e}")
         raise HTTPException(status_code=502, detail="Failed to communicate with device")
@@ -560,8 +585,18 @@ async def live_status(unit_id: str, db: Session = Depends(get_db)):
         # Persist snapshot with database session
         persist_snapshot(snap, db)
 
+        # Get the persisted status to include measurement_start_time
+        status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
+
+        # Build response with snapshot data + measurement_start_time
+        response_data = snap.__dict__.copy()
+        if status and status.measurement_start_time:
+            response_data['measurement_start_time'] = status.measurement_start_time.isoformat()
+        else:
+            response_data['measurement_start_time'] = None
+
         logger.info(f"Retrieved live status for unit {unit_id}")
-        return {"status": "ok", "data": snap.__dict__}
+        return {"status": "ok", "data": response_data}
 
     except ConnectionError as e:
         logger.error(f"Failed to get live status for {unit_id}: {e}")
@@ -646,12 +681,23 @@ async def stream_live(websocket: WebSocket, unit_id: str):
             except Exception as e:
                 logger.error(f"Failed to persist snapshot during stream: {e}")
 
+            # Get measurement_start_time from database
+            measurement_start_time = None
+            try:
+                status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
+                if status and status.measurement_start_time:
+                    measurement_start_time = status.measurement_start_time.isoformat()
+            except Exception as e:
+                logger.error(f"Failed to query measurement_start_time: {e}")
+
             # Send to WebSocket client
             try:
                 await websocket.send_json({
                     "unit_id": unit_id,
                     "timestamp": datetime.utcnow().isoformat(),
                     "measurement_state": snap.measurement_state,
+                    "measurement_start_time": measurement_start_time,
+                    "counter": snap.counter,  # Measurement interval counter (1-600)
                     "lp": snap.lp,      # Instantaneous sound pressure level
                     "leq": snap.leq,    # Equivalent continuous sound level
                     "lmax": snap.lmax,  # Maximum level
@@ -747,6 +793,56 @@ async def get_ftp_status(unit_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Failed to get FTP status from {unit_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get FTP status: {str(e)}")
+
+
+@router.get("/{unit_id}/ftp/latest-measurement-time")
+async def get_latest_measurement_time(unit_id: str, db: Session = Depends(get_db)):
+    """Get the timestamp of the most recent measurement session from the NL-43 folder.
+
+    The NL43 creates Auto_XXXX folders for each measurement session. This endpoint finds
+    the most recently modified Auto_XXXX folder and returns its timestamp, which indicates
+    when the measurement started.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.ftp_enabled:
+        raise HTTPException(status_code=403, detail="FTP is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        # List directories in the NL-43 folder
+        items = await client.list_ftp_files("/NL-43")
+
+        if not items:
+            return {"status": "ok", "latest_folder": None, "latest_timestamp": None}
+
+        # Filter for Auto_XXXX directories with timestamps
+        auto_folders = [
+            f for f in items
+            if f.get('is_dir', False)
+            and f.get('name', '').startswith('Auto_')
+            and f.get('modified_timestamp')
+        ]
+
+        if not auto_folders:
+            return {"status": "ok", "latest_folder": None, "latest_timestamp": None}
+
+        # Sort by modified_timestamp descending (most recent first)
+        auto_folders.sort(key=lambda x: x['modified_timestamp'], reverse=True)
+        latest = auto_folders[0]
+
+        logger.info(f"Latest measurement folder for {unit_id}: {latest['name']} at {latest['modified_timestamp']}")
+        return {
+            "status": "ok",
+            "latest_folder": latest['name'],
+            "latest_timestamp": latest['modified_timestamp']
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get latest measurement time for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=f"FTP connection failed: {str(e)}")
 
 
 @router.get("/{unit_id}/settings")
@@ -1013,6 +1109,38 @@ async def set_index_number(unit_id: str, payload: IndexPayload, db: Session = De
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to set index number for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.get("/{unit_id}/overwrite-check")
+async def check_overwrite_status(unit_id: str, db: Session = Depends(get_db)):
+    """Check if data exists at current store target.
+
+    Returns:
+        - "None": No data exists (safe to store)
+        - "Exist": Data exists (would overwrite existing data)
+
+    Use this before starting a measurement to prevent accidentally overwriting data.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    try:
+        overwrite_status = await client.get_overwrite_status()
+        will_overwrite = overwrite_status == "Exist"
+        return {
+            "status": "ok",
+            "overwrite_status": overwrite_status,
+            "will_overwrite": will_overwrite,
+            "safe_to_store": not will_overwrite
+        }
+    except Exception as e:
+        logger.error(f"Failed to check overwrite status for {unit_id}: {e}")
         raise HTTPException(status_code=502, detail=str(e))
 
 

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 class NL43Snapshot:
     unit_id: str
     measurement_state: str = "unknown"
+    counter: Optional[str] = None  # d0: Measurement interval counter (1-600)
     lp: Optional[str] = None    # Instantaneous sound pressure level
     leq: Optional[str] = None   # Equivalent continuous sound level
     lmax: Optional[str] = None  # Maximum level
@@ -46,7 +47,29 @@ def persist_snapshot(s: NL43Snapshot, db: Session):
             db.add(row)
 
         row.last_seen = datetime.utcnow()
-        row.measurement_state = s.measurement_state
+
+        # Track measurement start time by detecting state transition
+        previous_state = row.measurement_state
+        new_state = s.measurement_state
+
+        logger.info(f"State transition check for {s.unit_id}: '{previous_state}' -> '{new_state}'")
+
+        # Device returns "Start" when measuring, "Stop" when stopped
+        # Normalize to previous behavior for backward compatibility
+        is_measuring = new_state == "Start"
+        was_measuring = previous_state == "Start"
+
+        if not was_measuring and is_measuring:
+            # Measurement just started - record the start time
+            row.measurement_start_time = datetime.utcnow()
+            logger.info(f"✓ Measurement started on {s.unit_id} at {row.measurement_start_time}")
+        elif was_measuring and not is_measuring:
+            # Measurement stopped - clear the start time
+            row.measurement_start_time = None
+            logger.info(f"✓ Measurement stopped on {s.unit_id}")
+
+        row.measurement_state = new_state
+        row.counter = s.counter
         row.lp = s.lp
         row.leq = s.leq
         row.lmax = s.lmax
@@ -124,7 +147,7 @@ class NL43Client:
             if result_code.startswith("$"):
                 result_code = result_code[1:].strip()
 
-            logger.debug(f"Result code from {self.device_key}: {result_code}")
+            logger.info(f"Result code from {self.device_key}: {result_code}")
 
             # Check result code
             if result_code == "R+0000":
@@ -186,12 +209,21 @@ class NL43Client:
 
         logger.info(f"Parsed {len(parts)} data points from DOD response")
 
-        snap = NL43Snapshot(unit_id="", raw_payload=resp, measurement_state="Measure")
+        # Query actual measurement state (DOD doesn't include this information)
+        try:
+            measurement_state = await self.get_measurement_state()
+        except Exception as e:
+            logger.warning(f"Failed to get measurement state, defaulting to 'Measure': {e}")
+            measurement_state = "Measure"
+
+        snap = NL43Snapshot(unit_id="", raw_payload=resp, measurement_state=measurement_state)
 
         # Parse known positions (based on NL43 communication guide - DRD format)
         # DRD format: d0=counter, d1=Lp, d2=Leq, d3=Lmax, d4=Lmin, d5=Lpeak, d6=LIeq, ...
         try:
-            # Skip d0 (counter) - start from d1
+            # Capture d0 (counter) for timer synchronization
+            if len(parts) >= 1:
+                snap.counter = parts[0]  # d0: Measurement interval counter (1-600)
             if len(parts) >= 2:
                 snap.lp = parts[1]     # d1: Instantaneous sound pressure level
             if len(parts) >= 3:
@@ -443,7 +475,9 @@ class NL43Client:
                     # Parse known positions (DRD format - same as DOD)
                     # DRD format: d0=counter, d1=Lp, d2=Leq, d3=Lmax, d4=Lmin, d5=Lpeak, d6=LIeq, ...
                     try:
-                        # Skip d0 (counter) - start from d1
+                        # Capture d0 (counter) for timer synchronization
+                        if len(parts) >= 1:
+                            snap.counter = parts[0]  # d0: Measurement interval counter (1-600)
                         if len(parts) >= 2:
                             snap.lp = parts[1]     # d1: Instantaneous sound pressure level
                         if len(parts) >= 3:
@@ -533,22 +567,36 @@ class NL43Client:
         return resp.strip()
 
     async def set_index_number(self, index: int):
-        """Set index number for file numbering.
+        """Set index number for file numbering (Store Name).
 
         Args:
             index: Index number (0000-9999)
         """
         if not 0 <= index <= 9999:
             raise ValueError("Index must be between 0000 and 9999")
-        await self._send_command(f"Index Number,{index:04d}\r\n")
-        logger.info(f"Set index number to {index:04d} on {self.device_key}")
+        await self._send_command(f"Store Name,{index:04d}\r\n")
+        logger.info(f"Set store name (index) to {index:04d} on {self.device_key}")
 
     async def get_index_number(self) -> str:
-        """Get current index number.
+        """Get current index number (Store Name).
 
         Returns: Current index number
         """
-        resp = await self._send_command("Index Number?\r\n")
+        resp = await self._send_command("Store Name?\r\n")
+        return resp.strip()
+
+    async def get_overwrite_status(self) -> str:
+        """Check if saved data exists at current store target.
+
+        This command checks whether saved data exists in the set store target
+        (store mode / store name / store address). Use this before storing
+        to prevent accidentally overwriting data.
+
+        Returns:
+            "None" - No data exists (safe to store)
+            "Exist" - Data exists (would overwrite)
+        """
+        resp = await self._send_command("Overwrite?\r\n")
         return resp.strip()
 
     async def get_all_settings(self) -> dict:
@@ -690,11 +738,36 @@ class NL43Client:
                     if name in ('.', '..'):
                         continue
 
+                    # Parse modification time
+                    # Format: "Jan 07 14:23" or "Dec 25 2025"
+                    modified_str = f"{parts[5]} {parts[6]} {parts[7]}"
+                    modified_timestamp = None
+                    try:
+                        from datetime import datetime
+                        # Try parsing with time (recent files: "Jan 07 14:23")
+                        try:
+                            dt = datetime.strptime(modified_str, "%b %d %H:%M")
+                            # Add current year since it's not in the format
+                            dt = dt.replace(year=datetime.now().year)
+
+                            # If the resulting date is in the future, it's actually from last year
+                            if dt > datetime.now():
+                                dt = dt.replace(year=dt.year - 1)
+
+                            modified_timestamp = dt.isoformat()
+                        except ValueError:
+                            # Try parsing with year (older files: "Dec 25 2025")
+                            dt = datetime.strptime(modified_str, "%b %d %Y")
+                            modified_timestamp = dt.isoformat()
+                    except Exception as e:
+                        logger.warning(f"Failed to parse timestamp '{modified_str}': {e}")
+
                     file_info = {
                         "name": name,
                         "path": f"{remote_path.rstrip('/')}/{name}",
                         "size": size,
-                        "modified": f"{parts[5]} {parts[6]} {parts[7]}",
+                        "modified": modified_str,  # Keep original string
+                        "modified_timestamp": modified_timestamp,  # Add parsed timestamp
                         "is_dir": is_dir,
                     }
                     files.append(file_info)
