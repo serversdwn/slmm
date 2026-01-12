@@ -9,8 +9,9 @@ import asyncio
 import contextlib
 import logging
 import time
+import os
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from ftplib import FTP
@@ -19,6 +20,16 @@ from pathlib import Path
 from app.models import NL43Status
 
 logger = logging.getLogger(__name__)
+
+# Configurable timezone offset
+# Set via environment variable TIMEZONE_OFFSET (hours from UTC)
+# Default: -5 (EST - Eastern Standard Time, UTC-5)
+# Examples: -5 for EST, -4 for EDT, 0 for UTC, +1 for CET
+TIMEZONE_OFFSET_HOURS = float(os.getenv("TIMEZONE_OFFSET", "-5"))
+TIMEZONE_OFFSET = timedelta(hours=TIMEZONE_OFFSET_HOURS)
+TIMEZONE_NAME = os.getenv("TIMEZONE_NAME", f"UTC{TIMEZONE_OFFSET_HOURS:+.0f}")
+
+logger.info(f"Using timezone: {TIMEZONE_NAME} (UTC{TIMEZONE_OFFSET_HOURS:+.0f})")
 
 
 @dataclass
@@ -744,21 +755,30 @@ class NL43Client:
                     modified_timestamp = None
                     try:
                         from datetime import datetime
+                        # Get current time in configured timezone for year comparison
+                        now_local = datetime.utcnow() + TIMEZONE_OFFSET
+
                         # Try parsing with time (recent files: "Jan 07 14:23")
                         try:
                             dt = datetime.strptime(modified_str, "%b %d %H:%M")
                             # Add current year since it's not in the format
-                            dt = dt.replace(year=datetime.now().year)
+                            # Assume FTP timestamp is in the configured timezone
+                            dt = dt.replace(year=now_local.year)
 
                             # If the resulting date is in the future, it's actually from last year
-                            if dt > datetime.now():
+                            if dt > now_local:
                                 dt = dt.replace(year=dt.year - 1)
 
-                            modified_timestamp = dt.isoformat()
+                            # Convert local timezone to UTC
+                            dt_utc = dt - TIMEZONE_OFFSET
+
+                            modified_timestamp = dt_utc.isoformat()
                         except ValueError:
                             # Try parsing with year (older files: "Dec 25 2025")
                             dt = datetime.strptime(modified_str, "%b %d %Y")
-                            modified_timestamp = dt.isoformat()
+                            # Convert local timezone to UTC
+                            dt_utc = dt - TIMEZONE_OFFSET
+                            modified_timestamp = dt_utc.isoformat()
                     except Exception as e:
                         logger.warning(f"Failed to parse timestamp '{modified_str}': {e}")
 
