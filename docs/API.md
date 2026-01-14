@@ -48,6 +48,8 @@ Update device configuration.
 }
 ```
 
+**Important:** When TCP is enabled and connection details are provided, sleep mode will be automatically disabled on the device. This is necessary because sleep/eco mode turns off TCP communications, which would prevent remote monitoring and control.
+
 ## Device Status
 
 ### Get Cached Status
@@ -95,6 +97,8 @@ Opens a WebSocket connection and streams continuous DRD (Display Real-time Data)
 POST /{unit_id}/start
 ```
 Starts measurement on the device.
+
+**Important:** Before starting the measurement, sleep mode is automatically disabled to ensure TCP communications remain active throughout the measurement session.
 
 ### Stop Measurement
 ```
@@ -444,6 +448,12 @@ POST /{unit_id}/sleep
 Enables Sleep Mode on the device. When enabled, the device will automatically enter sleep mode between Timer Auto measurements.
 
 **Note:** This is a SETTING, not a command to sleep immediately. Sleep Mode only applies when using Timer Auto measurements.
+
+**Warning:** Sleep/eco mode turns off TCP communications, which will prevent remote monitoring and control. For this reason, SLMM automatically disables sleep mode when:
+- Device configuration is created or updated with TCP enabled
+- Measurements are started
+
+If you need to enable sleep mode for battery conservation, be aware that TCP connectivity will be lost until the device is physically accessed or wakes for a scheduled measurement.
 
 ### Wake Device
 ```

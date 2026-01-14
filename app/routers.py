@@ -18,6 +18,28 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/nl43", tags=["nl43"])
 
 
+async def ensure_sleep_mode_disabled(client: NL43Client, unit_id: str):
+    """
+    Helper function to ensure sleep mode is disabled on the device.
+    Sleep/eco mode turns off TCP communications, preventing remote monitoring.
+    This should be called when configuring a device or starting measurements.
+    """
+    try:
+        current_status = await client.get_sleep_status()
+        logger.info(f"Current sleep mode status for {unit_id}: {current_status}")
+
+        # If sleep mode is on, disable it
+        if "On" in current_status or "on" in current_status:
+            logger.info(f"Sleep mode is enabled on {unit_id}, disabling it to maintain TCP connectivity")
+            await client.wake()
+            logger.info(f"Successfully disabled sleep mode on {unit_id}")
+        else:
+            logger.info(f"Sleep mode already disabled on {unit_id}")
+    except Exception as e:
+        logger.warning(f"Could not verify/disable sleep mode on {unit_id}: {e}")
+        # Don't raise - we want configuration to succeed even if sleep mode check fails
+
+
 class ConfigPayload(BaseModel):
     host: str | None = None
     tcp_port: int | None = None
@@ -77,7 +99,7 @@ def get_config(unit_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{unit_id}/config")
-def upsert_config(unit_id: str, payload: ConfigPayload, db: Session = Depends(get_db)):
+async def upsert_config(unit_id: str, payload: ConfigPayload, db: Session = Depends(get_db)):
     cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
     if not cfg:
         cfg = NL43Config(unit_id=unit_id)
@@ -103,6 +125,14 @@ def upsert_config(unit_id: str, payload: ConfigPayload, db: Session = Depends(ge
     db.commit()
     db.refresh(cfg)
     logger.info(f"Updated config for unit {unit_id}")
+
+    # If TCP is enabled and we have connection details, automatically disable sleep mode
+    # to ensure TCP communications remain available
+    if cfg.tcp_enabled and cfg.host and cfg.tcp_port:
+        logger.info(f"TCP enabled for {unit_id}, ensuring sleep mode is disabled")
+        client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
+        await ensure_sleep_mode_disabled(client, unit_id)
+
     return {
         "status": "ok",
         "data": {
@@ -200,6 +230,10 @@ async def start_measurement(unit_id: str, db: Session = Depends(get_db)):
 
     client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
+        # Ensure sleep mode is disabled before starting measurement
+        # Sleep mode would interrupt TCP communications
+        await ensure_sleep_mode_disabled(client, unit_id)
+
         await client.start()
         logger.info(f"Started measurement on unit {unit_id}")
 
@@ -959,6 +993,49 @@ async def download_ftp_file(unit_id: str, payload: DownloadRequest, db: Session 
         raise HTTPException(status_code=502, detail="Failed to communicate with device")
     except Exception as e:
         logger.error(f"Unexpected error downloading file from {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@router.post("/{unit_id}/ftp/download-folder")
+async def download_ftp_folder(unit_id: str, payload: DownloadRequest, db: Session = Depends(get_db)):
+    """Download an entire folder from the device via FTP as a ZIP archive.
+
+    The folder is recursively downloaded and packaged into a ZIP file.
+    Useful for downloading complete measurement sessions (e.g., Auto_0000 folders).
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    # Create download directory
+    download_dir = f"data/downloads/{unit_id}"
+    os.makedirs(download_dir, exist_ok=True)
+
+    # Extract folder name from remote path
+    folder_name = os.path.basename(payload.remote_path.rstrip('/'))
+    if not folder_name:
+        raise HTTPException(status_code=400, detail="Invalid remote path")
+
+    # Generate ZIP filename
+    zip_filename = f"{folder_name}.zip"
+    zip_path = os.path.join(download_dir, zip_filename)
+
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
+    try:
+        await client.download_ftp_folder(payload.remote_path, zip_path)
+        logger.info(f"Downloaded folder {payload.remote_path} from {unit_id} to {zip_path}")
+
+        # Return the ZIP file
+        return FileResponse(
+            path=zip_path,
+            filename=zip_filename,
+            media_type="application/zip",
+        )
+    except ConnectionError as e:
+        logger.error(f"Failed to download folder from {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to communicate with device")
+    except Exception as e:
+        logger.error(f"Unexpected error downloading folder from {unit_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

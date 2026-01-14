@@ -10,6 +10,8 @@ import contextlib
 import logging
 import time
 import os
+import zipfile
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
@@ -850,3 +852,105 @@ class NL43Client:
         except Exception as e:
             logger.error(f"Failed to download {remote_path} from {self.device_key}: {e}")
             raise ConnectionError(f"FTP download failed: {str(e)}")
+
+    async def download_ftp_folder(self, remote_path: str, zip_path: str):
+        """Download an entire folder from the device via FTP as a ZIP archive.
+
+        Recursively downloads all files and subdirectories in the specified folder
+        and packages them into a ZIP file. This is useful for downloading complete
+        measurement sessions (e.g., Auto_0000 folders with all their contents).
+
+        Args:
+            remote_path: Full path to folder on the device (e.g., "/NL-43/Auto_0000")
+            zip_path: Local path where the ZIP file will be saved
+        """
+        logger.info(f"Downloading folder {remote_path} from {self.device_key} as ZIP to {zip_path}")
+
+        def _download_folder_sync():
+            """Synchronous FTP folder download and ZIP creation."""
+            ftp = FTP()
+            ftp.set_debuglevel(0)
+
+            # Create a temporary directory for downloaded files
+            with tempfile.TemporaryDirectory() as temp_dir:
+                try:
+                    # Connect and login
+                    ftp.connect(self.host, self.ftp_port, timeout=10)
+                    ftp.login(self.ftp_username, self.ftp_password)
+                    ftp.set_pasv(False)  # Force active mode
+
+                    def download_recursive(ftp_path: str, local_path: str):
+                        """Recursively download files and directories."""
+                        logger.info(f"Processing folder: {ftp_path}")
+
+                        # Create local directory
+                        os.makedirs(local_path, exist_ok=True)
+
+                        # List contents
+                        try:
+                            items = []
+                            ftp.cwd(ftp_path)
+                            ftp.retrlines('LIST', items.append)
+                        except Exception as e:
+                            logger.error(f"Failed to list {ftp_path}: {e}")
+                            return
+
+                        for item in items:
+                            # Parse FTP LIST output (Unix-style)
+                            parts = item.split(None, 8)
+                            if len(parts) < 9:
+                                continue
+
+                            permissions = parts[0]
+                            name = parts[8]
+
+                            # Skip . and .. entries
+                            if name in ['.', '..']:
+                                continue
+
+                            is_dir = permissions.startswith('d')
+                            full_remote_path = f"{ftp_path}/{name}".replace('//', '/')
+                            full_local_path = os.path.join(local_path, name)
+
+                            if is_dir:
+                                # Recursively download subdirectory
+                                download_recursive(full_remote_path, full_local_path)
+                            else:
+                                # Download file
+                                try:
+                                    logger.info(f"Downloading file: {full_remote_path}")
+                                    with open(full_local_path, 'wb') as f:
+                                        ftp.retrbinary(f'RETR {full_remote_path}', f.write)
+                                except Exception as e:
+                                    logger.error(f"Failed to download {full_remote_path}: {e}")
+
+                    # Download entire folder structure
+                    folder_name = os.path.basename(remote_path.rstrip('/'))
+                    local_folder = os.path.join(temp_dir, folder_name)
+                    download_recursive(remote_path, local_folder)
+
+                    # Create ZIP archive
+                    logger.info(f"Creating ZIP archive: {zip_path}")
+                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                        for root, dirs, files in os.walk(local_folder):
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                # Calculate relative path for ZIP archive
+                                arcname = os.path.relpath(file_path, temp_dir)
+                                zipf.write(file_path, arcname)
+                                logger.info(f"Added to ZIP: {arcname}")
+
+                    logger.info(f"Successfully created ZIP archive: {zip_path}")
+
+                finally:
+                    try:
+                        ftp.quit()
+                    except:
+                        pass
+
+        try:
+            # Run synchronous FTP folder download in thread pool
+            await asyncio.to_thread(_download_folder_sync)
+        except Exception as e:
+            logger.error(f"Failed to download folder {remote_path} from {self.device_key}: {e}")
+            raise ConnectionError(f"FTP folder download failed: {str(e)}")
