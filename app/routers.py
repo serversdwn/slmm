@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/nl43", tags=["nl43"])
 class ConfigPayload(BaseModel):
     host: str | None = None
     tcp_port: int | None = None
+    ftp_port: int | None = None
     tcp_enabled: bool | None = None
     ftp_enabled: bool | None = None
     ftp_username: str | None = None
@@ -44,7 +45,7 @@ class ConfigPayload(BaseModel):
                 raise ValueError("Host must be a valid IP address or hostname")
         return v
 
-    @field_validator("tcp_port")
+    @field_validator("tcp_port", "ftp_port")
     @classmethod
     def validate_port(cls, v):
         if v is None:
@@ -65,8 +66,11 @@ def get_config(unit_id: str, db: Session = Depends(get_db)):
             "unit_id": unit_id,
             "host": cfg.host,
             "tcp_port": cfg.tcp_port,
+            "ftp_port": cfg.ftp_port,
             "tcp_enabled": cfg.tcp_enabled,
             "ftp_enabled": cfg.ftp_enabled,
+            "ftp_username": cfg.ftp_username,
+            "ftp_password": cfg.ftp_password,
             "web_enabled": cfg.web_enabled,
         },
     }
@@ -83,6 +87,8 @@ def upsert_config(unit_id: str, payload: ConfigPayload, db: Session = Depends(ge
         cfg.host = payload.host
     if payload.tcp_port is not None:
         cfg.tcp_port = payload.tcp_port
+    if payload.ftp_port is not None:
+        cfg.ftp_port = payload.ftp_port
     if payload.tcp_enabled is not None:
         cfg.tcp_enabled = payload.tcp_enabled
     if payload.ftp_enabled is not None:
@@ -192,7 +198,7 @@ async def start_measurement(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.start()
         logger.info(f"Started measurement on unit {unit_id}")
@@ -235,7 +241,7 @@ async def stop_measurement(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.stop()
         logger.info(f"Stopped measurement on unit {unit_id}")
@@ -267,7 +273,7 @@ async def manual_store(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.manual_store()
         logger.info(f"Manual store executed on unit {unit_id}")
@@ -293,7 +299,7 @@ async def pause_measurement(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.pause()
         logger.info(f"Paused measurement on unit {unit_id}")
@@ -313,7 +319,7 @@ async def resume_measurement(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.resume()
         logger.info(f"Resumed measurement on unit {unit_id}")
@@ -333,7 +339,7 @@ async def reset_measurement(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.reset()
         logger.info(f"Reset measurement data on unit {unit_id}")
@@ -353,7 +359,7 @@ async def get_measurement_state(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         state = await client.get_measurement_state()
         is_measuring = state == "Start"
@@ -377,7 +383,7 @@ async def sleep_device(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.sleep()
         logger.info(f"Put device {unit_id} to sleep")
@@ -397,7 +403,7 @@ async def wake_device(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.wake()
         logger.info(f"Woke device {unit_id} from sleep")
@@ -417,7 +423,7 @@ async def get_sleep_status(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         status = await client.get_sleep_status()
         return {"status": "ok", "sleep_status": status}
@@ -436,7 +442,7 @@ async def get_battery(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         level = await client.get_battery_level()
         return {"status": "ok", "battery_level": level}
@@ -455,7 +461,7 @@ async def get_clock(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         clock = await client.get_clock()
         return {"status": "ok", "clock": clock}
@@ -478,7 +484,7 @@ async def set_clock(unit_id: str, payload: ClockPayload, db: Session = Depends(g
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.set_clock(payload.datetime)
         return {"status": "ok", "message": f"Clock set to {payload.datetime}"}
@@ -502,7 +508,7 @@ async def get_frequency_weighting(unit_id: str, channel: str = "Main", db: Sessi
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         weighting = await client.get_frequency_weighting(channel)
         return {"status": "ok", "frequency_weighting": weighting, "channel": channel}
@@ -521,7 +527,7 @@ async def set_frequency_weighting(unit_id: str, payload: WeightingPayload, db: S
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.set_frequency_weighting(payload.weighting, payload.channel)
         return {"status": "ok", "message": f"Frequency weighting set to {payload.weighting} on {payload.channel}"}
@@ -540,7 +546,7 @@ async def get_time_weighting(unit_id: str, channel: str = "Main", db: Session = 
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         weighting = await client.get_time_weighting(channel)
         return {"status": "ok", "time_weighting": weighting, "channel": channel}
@@ -559,7 +565,7 @@ async def set_time_weighting(unit_id: str, payload: WeightingPayload, db: Sessio
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.set_time_weighting(payload.weighting, payload.channel)
         return {"status": "ok", "message": f"Time weighting set to {payload.weighting} on {payload.channel}"}
@@ -577,7 +583,7 @@ async def live_status(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         snap = await client.request_dod()
         snap.unit_id = unit_id
@@ -622,7 +628,7 @@ async def get_results(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         results = await client.request_dlc()
         logger.info(f"Retrieved measurement results for unit {unit_id}")
@@ -669,7 +675,7 @@ async def stream_live(websocket: WebSocket, unit_id: str):
             return
 
         # Create client and define callback
-        client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+        client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
 
         async def send_snapshot(snap):
             """Callback that sends each snapshot to the WebSocket client."""
@@ -746,7 +752,7 @@ async def enable_ftp(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.enable_ftp()
         logger.info(f"Enabled FTP on unit {unit_id}")
@@ -766,7 +772,7 @@ async def disable_ftp(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.disable_ftp()
         logger.info(f"Disabled FTP on unit {unit_id}")
@@ -786,7 +792,7 @@ async def get_ftp_status(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         status = await client.get_ftp_status()
         return {"status": "ok", "ftp_enabled": status.lower() == "on", "ftp_status": status}
@@ -810,7 +816,7 @@ async def get_latest_measurement_time(unit_id: str, db: Session = Depends(get_db
     if not cfg.ftp_enabled:
         raise HTTPException(status_code=403, detail="FTP is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         # List directories in the NL-43 folder
         items = await client.list_ftp_files("/NL-43")
@@ -864,7 +870,7 @@ async def get_all_settings(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         settings = await client.get_all_settings()
         logger.info(f"Retrieved all settings for unit {unit_id}")
@@ -892,7 +898,7 @@ async def list_ftp_files(unit_id: str, path: str = "/", db: Session = Depends(ge
     if not cfg:
         raise HTTPException(status_code=404, detail="NL43 config not found")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         files = await client.list_ftp_files(path)
         return {"status": "ok", "path": path, "files": files, "count": len(files)}
@@ -937,7 +943,7 @@ async def download_ftp_file(unit_id: str, payload: DownloadRequest, db: Session 
 
     local_path = os.path.join(download_dir, filename)
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.download_ftp_file(payload.remote_path, local_path)
         logger.info(f"Downloaded {payload.remote_path} from {unit_id} to {local_path}")
@@ -968,7 +974,7 @@ async def get_measurement_time(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         preset = await client.get_measurement_time()
         return {"status": "ok", "measurement_time": preset}
@@ -987,7 +993,7 @@ async def set_measurement_time(unit_id: str, payload: TimingPayload, db: Session
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.set_measurement_time(payload.preset)
         return {"status": "ok", "message": f"Measurement time set to {payload.preset}"}
@@ -1006,7 +1012,7 @@ async def get_leq_interval(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         preset = await client.get_leq_interval()
         return {"status": "ok", "leq_interval": preset}
@@ -1025,7 +1031,7 @@ async def set_leq_interval(unit_id: str, payload: TimingPayload, db: Session = D
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.set_leq_interval(payload.preset)
         return {"status": "ok", "message": f"Leq interval set to {payload.preset}"}
@@ -1044,7 +1050,7 @@ async def get_lp_interval(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         preset = await client.get_lp_interval()
         return {"status": "ok", "lp_interval": preset}
@@ -1063,7 +1069,7 @@ async def set_lp_interval(unit_id: str, payload: TimingPayload, db: Session = De
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.set_lp_interval(payload.preset)
         return {"status": "ok", "message": f"Lp interval set to {payload.preset}"}
@@ -1082,7 +1088,7 @@ async def get_index_number(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         index = await client.get_index_number()
         return {"status": "ok", "index_number": index}
@@ -1101,7 +1107,7 @@ async def set_index_number(unit_id: str, payload: IndexPayload, db: Session = De
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         await client.set_index_number(payload.index)
         return {"status": "ok", "message": f"Index number set to {payload.index:04d}"}
@@ -1129,7 +1135,7 @@ async def check_overwrite_status(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         overwrite_status = await client.get_overwrite_status()
         will_overwrite = overwrite_status == "Exist"
@@ -1154,7 +1160,7 @@ async def get_all_settings(unit_id: str, db: Session = Depends(get_db)):
     if not cfg.tcp_enabled:
         raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
 
-    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
     try:
         settings = await client.get_all_settings()
         return {"status": "ok", "settings": settings}

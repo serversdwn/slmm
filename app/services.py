@@ -105,12 +105,13 @@ _rate_limit_lock = asyncio.Lock()
 
 
 class NL43Client:
-    def __init__(self, host: str, port: int, timeout: float = 5.0, ftp_username: str = None, ftp_password: str = None):
+    def __init__(self, host: str, port: int, timeout: float = 5.0, ftp_username: str = None, ftp_password: str = None, ftp_port: int = 21):
         self.host = host
         self.port = port
         self.timeout = timeout
-        self.ftp_username = ftp_username or "anonymous"
-        self.ftp_password = ftp_password or ""
+        self.ftp_username = ftp_username or "USER"
+        self.ftp_password = ftp_password or "0000"
+        self.ftp_port = ftp_port
         self.device_key = f"{host}:{port}"
 
     async def _enforce_rate_limit(self):
@@ -717,14 +718,17 @@ class NL43Client:
         logger.info(f"Listing FTP files on {self.device_key} at {remote_path}")
 
         def _list_ftp_sync():
-            """Synchronous FTP listing using ftplib (supports active mode)."""
+            """Synchronous FTP listing using ftplib for NL-43 devices."""
             ftp = FTP()
-            ftp.set_debuglevel(0)
+            ftp.set_debuglevel(2)  # Enable FTP debugging
             try:
                 # Connect and login
-                ftp.connect(self.host, 21, timeout=10)
+                logger.info(f"Connecting to FTP server at {self.host}:{self.ftp_port}")
+                ftp.connect(self.host, self.ftp_port, timeout=10)
+                logger.info(f"Logging in with username: {self.ftp_username}")
                 ftp.login(self.ftp_username, self.ftp_password)
-                ftp.set_pasv(False)  # Force active mode
+                ftp.set_pasv(False)  # Use active mode (required for NL-43 devices)
+                logger.info("FTP connection established in active mode")
 
                 # Change to target directory
                 if remote_path != "/":
@@ -824,7 +828,7 @@ class NL43Client:
             ftp.set_debuglevel(0)
             try:
                 # Connect and login
-                ftp.connect(self.host, 21, timeout=10)
+                ftp.connect(self.host, self.ftp_port, timeout=10)
                 ftp.login(self.ftp_username, self.ftp_password)
                 ftp.set_pasv(False)  # Force active mode
 

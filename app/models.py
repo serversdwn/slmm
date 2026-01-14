@@ -11,9 +11,10 @@ class NL43Config(Base):
 
     unit_id = Column(String, primary_key=True, index=True)
     host = Column(String, default="127.0.0.1")
-    tcp_port = Column(Integer, default=80)  # NL43 TCP control port (via RX55)
+    tcp_port = Column(Integer, default=2255)  # NL43 TCP control port (standard: 2255)
     tcp_enabled = Column(Boolean, default=True)
     ftp_enabled = Column(Boolean, default=False)
+    ftp_port = Column(Integer, default=21)  # FTP port (standard: 21)
     ftp_username = Column(String, nullable=True)  # FTP login username
     ftp_password = Column(String, nullable=True)  # FTP login password
     web_enabled = Column(Boolean, default=False)
