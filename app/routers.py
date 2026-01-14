@@ -652,6 +652,72 @@ async def live_status(unit_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@router.post("/{unit_id}/sync-start-time")
+async def sync_measurement_start_time(unit_id: str, db: Session = Depends(get_db)):
+    """
+    Sync measurement start time from FTP folder timestamp to database.
+    This fixes the issue where the database timestamp is wrong if measurement was already running.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    # FTP credentials might not be configured, but we'll try anyway
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
+
+    try:
+        # Get list of measurement folders from FTP
+        files = await client.list_ftp_files("/NL-43")
+
+        # Filter for directories only
+        folders = [f for f in files if f.get('is_dir', False)]
+
+        if not folders:
+            return {"status": "error", "message": "No measurement folders found on FTP"}
+
+        # Sort by modified timestamp (newest first)
+        folders.sort(key=lambda f: f.get('modified_timestamp', ''), reverse=True)
+
+        # Get the latest folder
+        latest_folder = folders[0]
+        folder_name = latest_folder['name']
+
+        # Parse timestamp from modified_timestamp field
+        if 'modified_timestamp' in latest_folder and latest_folder['modified_timestamp']:
+            from datetime import datetime
+            timestamp_str = latest_folder['modified_timestamp']
+
+            # Parse ISO format timestamp (already in UTC from SLMM)
+            start_time = datetime.fromisoformat(timestamp_str.replace('Z', ''))
+
+            # Update database
+            status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
+            if status:
+                old_time = status.measurement_start_time
+                status.measurement_start_time = start_time
+                db.commit()
+
+                logger.info(f"✓ Synced start time for {unit_id} from FTP folder {folder_name}")
+                logger.info(f"  Old: {old_time}")
+                logger.info(f"  New: {start_time}")
+
+                return {
+                    "status": "ok",
+                    "message": "Start time synced from FTP",
+                    "folder": folder_name,
+                    "start_time": start_time.isoformat(),
+                    "old_start_time": old_time.isoformat() if old_time else None
+                }
+            else:
+                return {"status": "error", "message": "Device status not found in database"}
+        else:
+            return {"status": "error", "message": "Could not parse timestamp from FTP folder"}
+
+    except Exception as e:
+        logger.error(f"Failed to sync start time for {unit_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to sync start time: {str(e)}")
+
+
 @router.get("/{unit_id}/results")
 async def get_results(unit_id: str, db: Session = Depends(get_db)):
     """Get final calculation results (DLC) from the last measurement."""
