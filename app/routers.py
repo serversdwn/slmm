@@ -156,6 +156,34 @@ def get_config(unit_id: str, db: Session = Depends(get_db)):
     }
 
 
+@router.delete("/{unit_id}/config")
+def delete_config(unit_id: str, db: Session = Depends(get_db)):
+    """
+    Delete device configuration and associated status data.
+
+    Used by Terra-View to remove devices from SLMM when deleted from roster.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    # Also delete associated status record
+    status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
+    if status:
+        db.delete(status)
+        logger.info(f"Deleted status record for {unit_id}")
+
+    db.delete(cfg)
+    db.commit()
+
+    logger.info(f"Deleted device config for {unit_id}")
+
+    return {
+        "status": "ok",
+        "message": f"Deleted device {unit_id}"
+    }
+
+
 @router.put("/{unit_id}/config")
 async def upsert_config(unit_id: str, payload: ConfigPayload, db: Session = Depends(get_db)):
     cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
