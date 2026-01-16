@@ -432,7 +432,16 @@ python set_ftp_credentials.py <unit_id> <username> <password>
 ```bash
 # Run comprehensive polling tests
 ./test_polling.sh [unit_id]
+
+# Test settings endpoint
+python3 test_settings_endpoint.py <unit_id>
+
+# Test sleep mode auto-disable
+python3 test_sleep_mode_auto_disable.py <unit_id>
 ```
+
+### Legacy Scripts
+Old migration scripts and manual polling tools have been moved to `archive/` for reference. See [archive/README.md](archive/README.md) for details.
 
 ## Contributing
 
