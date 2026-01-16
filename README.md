@@ -1,5 +1,7 @@
 # SLMM - Sound Level Meter Manager
 
+**Version 0.2.0**
+
 Backend API service for controlling and monitoring Rion NL-43/NL-53 Sound Level Meters via TCP and FTP protocols.
 
 ## Overview
@@ -10,6 +12,8 @@ SLMM is a standalone backend module that provides REST API routing and command t
 
 ## Features
 
+- **Background Polling** ⭐ NEW: Continuous automatic polling of devices with configurable intervals
+- **Offline Detection** ⭐ NEW: Automatic device reachability tracking with failure counters
 - **Device Management**: Configure and manage multiple NL43/NL53 devices
 - **Real-time Monitoring**: Stream live measurement data via WebSocket
 - **Measurement Control**: Start, stop, pause, resume, and reset measurements
@@ -22,17 +26,32 @@ SLMM is a standalone backend module that provides REST API routing and command t
 ## Architecture
 
 ```
-┌─────────────────┐         ┌──────────────┐         ┌─────────────────┐
-│  Terra-View UI  │◄───────►│  SLMM API    │◄───────►│  NL43/NL53      │
-│  (Frontend)     │  HTTP   │  (Backend)   │  TCP    │  Sound Meters   │
-└─────────────────┘         └──────────────┘         └─────────────────┘
-                                    │
-                                    ▼
-                            ┌──────────────┐
-                            │  SQLite DB   │
-                            │  (Cache)     │
-                            └──────────────┘
+┌─────────────────┐         ┌──────────────────────────────┐         ┌─────────────────┐
+│  Terra-View UI  │◄───────►│  SLMM API                    │◄───────►│  NL43/NL53      │
+│  (Frontend)     │  HTTP   │  • REST Endpoints            │  TCP    │  Sound Meters   │
+└─────────────────┘         │  • WebSocket Streaming       │         └─────────────────┘
+                            │  • Background Poller ⭐ NEW  │                ▲
+                            └──────────────────────────────┘                │
+                                          │                         Continuous
+                                          ▼                          Polling
+                                  ┌──────────────┐                      │
+                                  │  SQLite DB   │◄─────────────────────┘
+                                  │  • Config    │
+                                  │  • Status    │
+                                  └──────────────┘
 ```
+
+### Background Polling (v0.2.0)
+
+SLMM now includes a background polling service that continuously queries devices and updates the status cache:
+
+- **Automatic Updates**: Devices are polled at configurable intervals (10-3600 seconds)
+- **Offline Detection**: Devices marked unreachable after 3 consecutive failures
+- **Per-Device Configuration**: Each device can have a custom polling interval
+- **Resource Efficient**: Dynamic sleep intervals and smart scheduling
+- **Graceful Shutdown**: Background task stops cleanly on service shutdown
+
+This makes Terra-View significantly more responsive - status requests return cached data instantly (<100ms) instead of waiting for device queries (1-2 seconds).
 
 ## Quick Start
 
@@ -103,9 +122,17 @@ Logs are written to:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/nl43/{unit_id}/status` | Get cached measurement snapshot |
-| GET | `/api/nl43/{unit_id}/live` | Request fresh DOD data from device |
+| GET | `/api/nl43/{unit_id}/status` | Get cached measurement snapshot (updated by background poller) |
+| GET | `/api/nl43/{unit_id}/live` | Request fresh DOD data from device (bypasses cache) |
 | WS | `/api/nl43/{unit_id}/stream` | WebSocket stream for real-time DRD data |
+
+### Background Polling Configuration ⭐ NEW
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/nl43/{unit_id}/polling/config` | Get device polling configuration |
+| PUT | `/api/nl43/{unit_id}/polling/config` | Update polling interval and enable/disable polling |
+| GET | `/api/nl43/_polling/status` | Get global polling status for all devices |
 
 ### Measurement Control
 
@@ -167,6 +194,7 @@ slmm/
 │   ├── routers.py           # API route definitions
 │   ├── models.py            # SQLAlchemy database models
 │   ├── services.py          # NL43Client and business logic
+│   ├── background_poller.py # Background polling service ⭐ NEW
 │   └── database.py          # Database configuration
 ├── data/
 │   ├── slmm.db              # SQLite database (auto-created)
@@ -175,9 +203,12 @@ slmm/
 ├── templates/
 │   └── index.html           # Simple web interface (optional)
 ├── manuals/                 # Device documentation
+├── migrate_add_polling_fields.py  # Database migration for v0.2.0 ⭐ NEW
+├── test_polling.sh          # Polling feature test script ⭐ NEW
 ├── API.md                   # Detailed API documentation
 ├── COMMUNICATION_GUIDE.md   # NL43 protocol documentation
 ├── NL43_COMMANDS.md         # Command reference
+├── CHANGELOG.md             # Version history ⭐ NEW
 ├── requirements.txt         # Python dependencies
 └── README.md                # This file
 ```
@@ -194,12 +225,16 @@ Stores device connection configuration:
 - `ftp_username`: FTP authentication username
 - `ftp_password`: FTP authentication password
 - `web_enabled`: Enable/disable web interface access
+- `poll_interval_seconds`: Polling interval in seconds (10-3600, default: 60) ⭐ NEW
+- `poll_enabled`: Enable/disable background polling for this device ⭐ NEW
 
 ### NL43Status Table
 Caches latest measurement snapshot:
 - `unit_id` (PK): Unique device identifier
 - `last_seen`: Timestamp of last update
 - `measurement_state`: Current state (Measure/Stop)
+- `measurement_start_time`: When measurement started (UTC)
+- `counter`: Measurement interval counter (1-600)
 - `lp`: Instantaneous sound pressure level
 - `leq`: Equivalent continuous sound level
 - `lmax`: Maximum sound level
@@ -210,6 +245,11 @@ Caches latest measurement snapshot:
 - `sd_remaining_mb`: Free SD card space (MB)
 - `sd_free_ratio`: SD card free space ratio
 - `raw_payload`: Raw device response data
+- `is_reachable`: Device reachability status (Boolean) ⭐ NEW
+- `consecutive_failures`: Count of consecutive poll failures ⭐ NEW
+- `last_poll_attempt`: Last time background poller attempted to poll ⭐ NEW
+- `last_success`: Last successful poll timestamp ⭐ NEW
+- `last_error`: Last error message (truncated to 500 chars) ⭐ NEW
 
 ## Protocol Details
 
@@ -253,9 +293,31 @@ curl -X PUT http://localhost:8100/api/nl43/meter-001/config \
 curl -X POST http://localhost:8100/api/nl43/meter-001/start
 ```
 
-### Get Live Status
+### Get Cached Status (Fast - from background poller)
+```bash
+curl http://localhost:8100/api/nl43/meter-001/status
+```
+
+### Get Live Status (Bypasses cache)
 ```bash
 curl http://localhost:8100/api/nl43/meter-001/live
+```
+
+### Configure Background Polling ⭐ NEW
+```bash
+# Set polling interval to 30 seconds
+curl -X PUT http://localhost:8100/api/nl43/meter-001/polling/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "poll_interval_seconds": 30,
+    "poll_enabled": true
+  }'
+
+# Get polling configuration
+curl http://localhost:8100/api/nl43/meter-001/polling/config
+
+# Check global polling status
+curl http://localhost:8100/api/nl43/_polling/status
 ```
 
 ### Verify Device Settings
@@ -356,11 +418,20 @@ pytest
 
 ### Database Migrations
 ```bash
-# Migrate existing database to add FTP credentials
+# Migrate to v0.2.0 (add background polling fields)
+python3 migrate_add_polling_fields.py
+
+# Legacy: Migrate to add FTP credentials
 python migrate_add_ftp_credentials.py
 
 # Set FTP credentials for a device
 python set_ftp_credentials.py <unit_id> <username> <password>
+```
+
+### Testing Background Polling
+```bash
+# Run comprehensive polling tests
+./test_polling.sh [unit_id]
 ```
 
 ## Contributing

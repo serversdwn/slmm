@@ -1,5 +1,6 @@
 import os
 import logging
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -7,6 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.database import Base, engine
 from app import routers
+from app.background_poller import poller
 
 # Configure logging
 logging.basicConfig(
@@ -23,10 +25,28 @@ logger = logging.getLogger(__name__)
 Base.metadata.create_all(bind=engine)
 logger.info("Database tables initialized")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifecycle - startup and shutdown events."""
+    # Startup
+    logger.info("Starting background poller...")
+    await poller.start()
+    logger.info("Background poller started")
+
+    yield  # Application runs
+
+    # Shutdown
+    logger.info("Stopping background poller...")
+    await poller.stop()
+    logger.info("Background poller stopped")
+
+
 app = FastAPI(
     title="SLMM NL43 Addon",
-    description="Standalone module for NL43 configuration and status APIs",
-    version="0.1.0",
+    description="Standalone module for NL43 configuration and status APIs with background polling",
+    version="0.2.0",
+    lifespan=lifespan,
 )
 
 # CORS configuration - use environment variable for allowed origins

@@ -19,6 +19,10 @@ class NL43Config(Base):
     ftp_password = Column(String, nullable=True)  # FTP login password
     web_enabled = Column(Boolean, default=False)
 
+    # Background polling configuration
+    poll_interval_seconds = Column(Integer, nullable=True, default=60)  # Polling interval (10-3600 seconds)
+    poll_enabled = Column(Boolean, default=True)  # Enable/disable background polling for this device
+
 
 class NL43Status(Base):
     """
@@ -42,3 +46,10 @@ class NL43Status(Base):
     sd_remaining_mb = Column(String, nullable=True)
     sd_free_ratio = Column(String, nullable=True)
     raw_payload = Column(Text, nullable=True)
+
+    # Background polling status
+    is_reachable = Column(Boolean, default=True)  # Device reachability status
+    consecutive_failures = Column(Integer, default=0)  # Count of consecutive poll failures
+    last_poll_attempt = Column(DateTime, nullable=True)  # Last time background poller attempted to poll
+    last_success = Column(DateTime, nullable=True)  # Last successful poll timestamp
+    last_error = Column(Text, nullable=True)  # Last error message (truncated to 500 chars)

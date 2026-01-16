@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, Field
 import logging
 import ipaddress
 import json
@@ -76,6 +76,64 @@ class ConfigPayload(BaseModel):
             raise ValueError("Port must be between 1 and 65535")
         return v
 
+
+class PollingConfigPayload(BaseModel):
+    """Payload for updating device polling configuration."""
+    poll_interval_seconds: int | None = Field(None, ge=10, le=3600, description="Polling interval in seconds (10-3600)")
+    poll_enabled: bool | None = Field(None, description="Enable or disable background polling for this device")
+
+
+# ============================================================================
+# GLOBAL POLLING STATUS ENDPOINT (must be before /{unit_id} routes)
+# ============================================================================
+
+@router.get("/_polling/status")
+def get_global_polling_status(db: Session = Depends(get_db)):
+    """
+    Get global background polling status for all devices.
+
+    Returns information about which devices are being polled, their
+    reachability status, failure counts, and last poll times.
+
+    Useful for monitoring the health of the background polling system.
+
+    Note: Must be defined before /{unit_id} routes to avoid routing conflicts.
+    """
+    from app.background_poller import poller
+
+    configs = db.query(NL43Config).filter_by(
+        tcp_enabled=True,
+        poll_enabled=True
+    ).all()
+
+    device_statuses = []
+    for cfg in configs:
+        status = db.query(NL43Status).filter_by(unit_id=cfg.unit_id).first()
+
+        device_statuses.append({
+            "unit_id": cfg.unit_id,
+            "poll_interval_seconds": cfg.poll_interval_seconds,
+            "poll_enabled": cfg.poll_enabled,
+            "is_reachable": status.is_reachable if status else None,
+            "consecutive_failures": status.consecutive_failures if status else 0,
+            "last_poll_attempt": status.last_poll_attempt.isoformat() if status and status.last_poll_attempt else None,
+            "last_success": status.last_success.isoformat() if status and status.last_success else None,
+            "last_error": status.last_error if status else None
+        })
+
+    return {
+        "status": "ok",
+        "data": {
+            "poller_running": poller._running,
+            "total_devices": len(configs),
+            "devices": device_statuses
+        }
+    }
+
+
+# ============================================================================
+# DEVICE-SPECIFIC ENDPOINTS
+# ============================================================================
 
 @router.get("/{unit_id}/config")
 def get_config(unit_id: str, db: Session = Depends(get_db)):
@@ -167,6 +225,12 @@ def get_status(unit_id: str, db: Session = Depends(get_db)):
             "sd_remaining_mb": status.sd_remaining_mb,
             "sd_free_ratio": status.sd_free_ratio,
             "raw_payload": status.raw_payload,
+            # Background polling status
+            "is_reachable": status.is_reachable,
+            "consecutive_failures": status.consecutive_failures,
+            "last_poll_attempt": status.last_poll_attempt.isoformat() if status.last_poll_attempt else None,
+            "last_success": status.last_success.isoformat() if status.last_success else None,
+            "last_error": status.last_error,
         },
     }
 
@@ -1480,3 +1544,77 @@ async def run_diagnostics(unit_id: str, db: Session = Depends(get_db)):
     # All tests passed
     diagnostics["overall_status"] = "pass"
     return diagnostics
+
+
+# ============================================================================
+# BACKGROUND POLLING CONFIGURATION ENDPOINTS
+# ============================================================================
+
+@router.get("/{unit_id}/polling/config")
+def get_polling_config(unit_id: str, db: Session = Depends(get_db)):
+    """
+    Get background polling configuration for a device.
+
+    Returns the current polling interval and enabled status for automatic
+    background status polling.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="Device configuration not found")
+
+    return {
+        "status": "ok",
+        "data": {
+            "unit_id": unit_id,
+            "poll_interval_seconds": cfg.poll_interval_seconds,
+            "poll_enabled": cfg.poll_enabled
+        }
+    }
+
+
+@router.put("/{unit_id}/polling/config")
+def update_polling_config(
+    unit_id: str,
+    payload: PollingConfigPayload,
+    db: Session = Depends(get_db)
+):
+    """
+    Update background polling configuration for a device.
+
+    Allows configuring the polling interval (10-3600 seconds) and
+    enabling/disabling automatic background polling per device.
+
+    Changes take effect on the next polling cycle.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="Device configuration not found")
+
+    # Update interval if provided
+    if payload.poll_interval_seconds is not None:
+        if payload.poll_interval_seconds < 10:
+            raise HTTPException(
+                status_code=400,
+                detail="Polling interval must be at least 10 seconds"
+            )
+        cfg.poll_interval_seconds = payload.poll_interval_seconds
+
+    # Update enabled status if provided
+    if payload.poll_enabled is not None:
+        cfg.poll_enabled = payload.poll_enabled
+
+    db.commit()
+
+    logger.info(
+        f"Updated polling config for {unit_id}: "
+        f"interval={cfg.poll_interval_seconds}s, enabled={cfg.poll_enabled}"
+    )
+
+    return {
+        "status": "ok",
+        "data": {
+            "unit_id": unit_id,
+            "poll_interval_seconds": cfg.poll_interval_seconds,
+            "poll_enabled": cfg.poll_enabled
+        }
+    }
