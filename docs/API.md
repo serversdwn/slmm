@@ -483,7 +483,7 @@ POST /{unit_id}/ftp/enable
 ```
 Enables FTP server on the device.
 
-**Note:** FTP and TCP are mutually exclusive. Enabling FTP will temporarily disable TCP control.
+**Note:** ~~FTP and TCP are mutually exclusive. Enabling FTP will temporarily disable TCP control.~~ As of v0.2.0, FTP and TCP are working fine in tandem. Just dont spam them a bunch.
 
 ### Disable FTP
 ```
