@@ -72,6 +72,11 @@ def index(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
 
+@app.get("/roster", response_class=HTMLResponse)
+def roster(request: Request):
+    return templates.TemplateResponse("roster.html", {"request": request})
+
+
 @app.get("/health")
 async def health():
     """Basic health check endpoint."""

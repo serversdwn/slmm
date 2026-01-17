@@ -31,6 +31,11 @@
 <body>
   <h1>SLMM NL43 Standalone</h1>
   <p>Configure a unit (host/port), then use controls to Start/Stop and fetch live status.</p>
+  <p style="margin-bottom: 16px;">
+    <a href="/roster" style="color: #0969da; text-decoration: none; font-weight: 600;">📊 View Device Roster</a>
+    <span style="margin: 0 8px; color: #d0d7de;">|</span>
+    <a href="/docs" style="color: #0969da; text-decoration: none;">API Documentation</a>
+  </p>
 
   <fieldset>
     <legend>🔍 Connection Diagnostics</legend>
@@ -40,13 +45,34 @@
   </fieldset>
 
   <fieldset>
-    <legend>Unit Config</legend>
-    <label>Unit ID</label>
-    <input id="unitId" value="nl43-1" />
-    <label>Host</label>
-    <input id="host" value="127.0.0.1" />
-    <label>Port</label>
-    <input id="port" type="number" value="80" />
+    <legend>Unit Selection & Config</legend>
+
+    <div style="display: flex; gap: 8px; align-items: flex-end; margin-bottom: 12px;">
+      <div style="flex: 1;">
+        <label>Select Device</label>
+        <select id="deviceSelector" onchange="loadSelectedDevice()" style="width: 100%; padding: 8px; margin-bottom: 0;">
+          <option value="">-- Select a device --</option>
+        </select>
+      </div>
+      <button onclick="refreshDeviceList()" style="padding: 8px 12px;">↻ Refresh</button>
+    </div>
+
+    <div style="padding: 12px; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; margin-bottom: 12px;">
+      <div style="display: flex; gap: 16px;">
+        <div style="flex: 1;">
+          <label>Unit ID</label>
+          <input id="unitId" value="nl43-1" />
+        </div>
+        <div style="flex: 2;">
+          <label>Host</label>
+          <input id="host" value="127.0.0.1" />
+        </div>
+        <div style="flex: 1;">
+          <label>TCP Port</label>
+          <input id="port" type="number" value="2255" />
+        </div>
+      </div>
+    </div>
 
     <div style="margin: 12px 0;">
       <label style="display: inline-flex; align-items: center; margin-right: 16px;">
@@ -66,8 +92,10 @@
       <input id="ftpPassword" type="password" value="0000" />
     </div>
 
-    <button onclick="saveConfig()" style="margin-top: 12px;">Save Config</button>
-    <button onclick="loadConfig()">Load Config</button>
+    <div style="margin-top: 12px;">
+      <button onclick="saveConfig()">Save Config</button>
+      <button onclick="loadConfig()">Load Config</button>
+    </div>
   </fieldset>
 
   <fieldset>
@@ -148,6 +176,7 @@
 
     let ws = null;
     let streamUpdateCount = 0;
+    let availableDevices = [];
 
     function log(msg) {
       logEl.textContent += msg + "\n";
@@ -160,9 +189,97 @@
       ftpCredentials.style.display = ftpEnabled ? 'block' : 'none';
     }
 
-    // Add event listener for FTP checkbox
+    // Load device list from roster
+    async function refreshDeviceList() {
+      try {
+        const res = await fetch('/api/nl43/roster');
+        const data = await res.json();
+
+        if (!res.ok) {
+          log('Failed to load device list');
+          return;
+        }
+
+        availableDevices = data.devices || [];
+        const selector = document.getElementById('deviceSelector');
+
+        // Save current selection
+        const currentSelection = selector.value;
+
+        // Clear and rebuild options
+        selector.innerHTML = '<option value="">-- Select a device --</option>';
+
+        availableDevices.forEach(device => {
+          const option = document.createElement('option');
+          option.value = device.unit_id;
+
+          // Add status indicator
+          let statusIcon = '⚪';
+          if (device.status) {
+            if (device.status.is_reachable === false) {
+              statusIcon = '🔴';
+            } else if (device.status.last_success) {
+              const lastSeen = new Date(device.status.last_success);
+              const ageMinutes = Math.floor((Date.now() - lastSeen) / 60000);
+              statusIcon = ageMinutes < 5 ? '🟢' : '🟡';
+            }
+          }
+
+          option.textContent = `${statusIcon} ${device.unit_id} (${device.host})`;
+          selector.appendChild(option);
+        });
+
+        // Restore selection if it still exists
+        if (currentSelection && availableDevices.find(d => d.unit_id === currentSelection)) {
+          selector.value = currentSelection;
+        }
+
+        log(`Loaded ${availableDevices.length} device(s) from roster`);
+      } catch (err) {
+        log(`Error loading device list: ${err.message}`);
+      }
+    }
+
+    // Load selected device configuration
+    function loadSelectedDevice() {
+      const selector = document.getElementById('deviceSelector');
+      const unitId = selector.value;
+
+      if (!unitId) {
+        return;
+      }
+
+      const device = availableDevices.find(d => d.unit_id === unitId);
+      if (!device) {
+        log(`Device ${unitId} not found in list`);
+        return;
+      }
+
+      // Populate form fields
+      document.getElementById('unitId').value = device.unit_id;
+      document.getElementById('host').value = device.host;
+      document.getElementById('port').value = device.tcp_port || 2255;
+      document.getElementById('tcpEnabled').checked = device.tcp_enabled || false;
+      document.getElementById('ftpEnabled').checked = device.ftp_enabled || false;
+
+      if (device.ftp_username) {
+        document.getElementById('ftpUsername').value = device.ftp_username;
+      }
+      if (device.ftp_password) {
+        document.getElementById('ftpPassword').value = device.ftp_password;
+      }
+
+      toggleFtpCredentials();
+
+      log(`Loaded configuration for ${device.unit_id}`);
+    }
+
+    // Add event listeners
     document.addEventListener('DOMContentLoaded', function() {
       document.getElementById('ftpEnabled').addEventListener('change', toggleFtpCredentials);
+
+      // Load device list on page load
+      refreshDeviceList();
     });
 
     async function runDiagnostics() {

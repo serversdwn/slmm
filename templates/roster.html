@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SLMM Roster - Sound Level Meter Configuration</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0;
+      padding: 24px;
+      background: #f6f8fa;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding: 16px;
+      background: white;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    h1 { margin: 0; font-size: 24px; }
+    .nav { display: flex; gap: 12px; }
+    .btn {
+      padding: 8px 16px;
+      border: 1px solid #d0d7de;
+      background: white;
+      border-radius: 6px;
+      cursor: pointer;
+      text-decoration: none;
+      color: #24292f;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+    .btn:hover { background: #f6f8fa; }
+    .btn-primary {
+      background: #2da44e;
+      color: white;
+      border-color: #2da44e;
+    }
+    .btn-primary:hover { background: #2c974b; }
+    .btn-danger {
+      background: #cf222e;
+      color: white;
+      border-color: #cf222e;
+    }
+    .btn-danger:hover { background: #a40e26; }
+    .btn-small {
+      padding: 4px 8px;
+      font-size: 12px;
+      margin-right: 4px;
+    }
+    .table-container {
+      background: white;
+      border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th {
+      background: #f6f8fa;
+      padding: 12px;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 2px solid #d0d7de;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+    td {
+      padding: 12px;
+      border-bottom: 1px solid #d0d7de;
+      font-size: 13px;
+    }
+    tr:hover { background: #f6f8fa; }
+    .status-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+    .status-ok {
+      background: #dafbe1;
+      color: #1a7f37;
+    }
+    .status-unknown {
+      background: #eaeef2;
+      color: #57606a;
+    }
+    .status-error {
+      background: #ffebe9;
+      color: #cf222e;
+    }
+    .checkbox-cell {
+      text-align: center;
+      width: 80px;
+    }
+    .checkbox-cell input[type="checkbox"] {
+      cursor: pointer;
+      width: 16px;
+      height: 16px;
+    }
+    .actions-cell {
+      white-space: nowrap;
+      width: 200px;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 48px;
+      color: #57606a;
+    }
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: white;
+      padding: 24px;
+      border-radius: 6px;
+      max-width: 600px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+    .modal-header h2 {
+      margin: 0;
+      font-size: 20px;
+    }
+    .close-btn {
+      background: none;
+      border: none;
+      font-size: 24px;
+      cursor: pointer;
+      color: #57606a;
+      padding: 0;
+      width: 32px;
+      height: 32px;
+    }
+    .close-btn:hover { color: #24292f; }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .form-group input[type="text"],
+    .form-group input[type="number"],
+    .form-group input[type="password"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .form-group input[type="checkbox"] {
+      width: auto;
+      margin-right: 8px;
+    }
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      font-weight: normal;
+      cursor: pointer;
+    }
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 24px;
+    }
+    .toast {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      padding: 12px 16px;
+      background: #24292f;
+      color: white;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      z-index: 2000;
+      display: none;
+      min-width: 300px;
+    }
+    .toast.active {
+      display: block;
+      animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    .toast-success { background: #2da44e; }
+    .toast-error { background: #cf222e; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📊 Sound Level Meter Roster</h1>
+      <div class="nav">
+        <a href="/" class="btn">← Back to Control Panel</a>
+        <button class="btn btn-primary" onclick="openAddModal()">+ Add Device</button>
+      </div>
+    </div>
+
+    <div class="table-container">
+      <table id="rosterTable">
+        <thead>
+          <tr>
+            <th>Unit ID</th>
+            <th>Host / IP</th>
+            <th>TCP Port</th>
+            <th>FTP Port</th>
+            <th class="checkbox-cell">TCP</th>
+            <th class="checkbox-cell">FTP</th>
+            <th class="checkbox-cell">Polling</th>
+            <th>Status</th>
+            <th class="actions-cell">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="rosterBody">
+          <tr>
+            <td colspan="9" style="text-align: center; padding: 24px;">
+              Loading...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Add/Edit Modal -->
+  <div id="deviceModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="modalTitle">Add Device</h2>
+        <button class="close-btn" onclick="closeModal()">&times;</button>
+      </div>
+
+      <form id="deviceForm" onsubmit="saveDevice(event)">
+        <div class="form-group">
+          <label for="unitId">Unit ID *</label>
+          <input type="text" id="unitId" required placeholder="e.g., nl43-1, slm-site-a" />
+        </div>
+
+        <div class="form-group">
+          <label for="host">Host / IP Address *</label>
+          <input type="text" id="host" required placeholder="e.g., 192.168.1.100" />
+        </div>
+
+        <div class="form-group">
+          <label for="tcpPort">TCP Port *</label>
+          <input type="number" id="tcpPort" required value="2255" min="1" max="65535" />
+        </div>
+
+        <div class="form-group">
+          <label for="ftpPort">FTP Port</label>
+          <input type="number" id="ftpPort" value="21" min="1" max="65535" />
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="tcpEnabled" checked />
+            TCP Enabled (required for remote control)
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="ftpEnabled" onchange="toggleFtpCredentials()" />
+            FTP Enabled (for file downloads)
+          </label>
+        </div>
+
+        <div id="ftpCredentialsSection" style="display: none; padding: 12px; background: #f6f8fa; border-radius: 6px; margin-bottom: 16px;">
+          <div class="form-group">
+            <label for="ftpUsername">FTP Username</label>
+            <input type="text" id="ftpUsername" placeholder="Default: USER" />
+          </div>
+
+          <div class="form-group">
+            <label for="ftpPassword">FTP Password</label>
+            <input type="password" id="ftpPassword" placeholder="Default: 0000" />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="pollEnabled" checked />
+            Enable background polling (status updates)
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="pollInterval">Polling Interval (seconds)</label>
+          <input type="number" id="pollInterval" value="60" min="10" max="3600" />
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Device</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    let devices = [];
+    let editingDeviceId = null;
+
+    // Load roster on page load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadRoster();
+    });
+
+    async function loadRoster() {
+      try {
+        const res = await fetch('/api/nl43/roster');
+        const data = await res.json();
+
+        if (!res.ok) {
+          showToast('Failed to load roster', 'error');
+          return;
+        }
+
+        devices = data.devices || [];
+        renderRoster();
+      } catch (err) {
+        showToast('Error loading roster: ' + err.message, 'error');
+        console.error('Load roster error:', err);
+      }
+    }
+
+    function renderRoster() {
+      const tbody = document.getElementById('rosterBody');
+
+      if (devices.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="9" class="empty-state">
+              <div class="empty-state-icon">📭</div>
+              <div><strong>No devices configured</strong></div>
+              <div style="margin-top: 8px; font-size: 14px;">Click "Add Device" to configure your first sound level meter</div>
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = devices.map(device => `
+        <tr>
+          <td><strong>${escapeHtml(device.unit_id)}</strong></td>
+          <td>${escapeHtml(device.host)}</td>
+          <td>${device.tcp_port}</td>
+          <td>${device.ftp_port || 21}</td>
+          <td class="checkbox-cell">
+            <input type="checkbox" ${device.tcp_enabled ? 'checked' : ''} disabled />
+          </td>
+          <td class="checkbox-cell">
+            <input type="checkbox" ${device.ftp_enabled ? 'checked' : ''} disabled />
+          </td>
+          <td class="checkbox-cell">
+            <input type="checkbox" ${device.poll_enabled ? 'checked' : ''} disabled />
+          </td>
+          <td>
+            ${getStatusBadge(device)}
+          </td>
+          <td class="actions-cell">
+            <button class="btn btn-small" onclick="testDevice('${escapeHtml(device.unit_id)}')">Test</button>
+            <button class="btn btn-small" onclick="openEditModal('${escapeHtml(device.unit_id)}')">Edit</button>
+            <button class="btn btn-small btn-danger" onclick="deleteDevice('${escapeHtml(device.unit_id)}')">Delete</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function getStatusBadge(device) {
+      if (!device.status) {
+        return '<span class="status-badge status-unknown">Unknown</span>';
+      }
+
+      if (device.status.is_reachable === false) {
+        return '<span class="status-badge status-error">Offline</span>';
+      }
+
+      if (device.status.last_success) {
+        const lastSeen = new Date(device.status.last_success);
+        const ago = Math.floor((Date.now() - lastSeen) / 1000);
+        if (ago < 300) { // Less than 5 minutes
+          return '<span class="status-badge status-ok">Online</span>';
+        } else {
+          return `<span class="status-badge status-unknown">Stale (${Math.floor(ago / 60)}m ago)</span>`;
+        }
+      }
+
+      return '<span class="status-badge status-unknown">Unknown</span>';
+    }
+
+    function escapeHtml(text) {
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    function openAddModal() {
+      editingDeviceId = null;
+      document.getElementById('modalTitle').textContent = 'Add Device';
+      document.getElementById('deviceForm').reset();
+      document.getElementById('unitId').disabled = false;
+      document.getElementById('tcpEnabled').checked = true;
+      document.getElementById('ftpEnabled').checked = false;
+      document.getElementById('pollEnabled').checked = true;
+      document.getElementById('tcpPort').value = 2255;
+      document.getElementById('ftpPort').value = 21;
+      document.getElementById('pollInterval').value = 60;
+      toggleFtpCredentials();
+      document.getElementById('deviceModal').classList.add('active');
+    }
+
+    function openEditModal(unitId) {
+      const device = devices.find(d => d.unit_id === unitId);
+      if (!device) {
+        showToast('Device not found', 'error');
+        return;
+      }
+
+      editingDeviceId = unitId;
+      document.getElementById('modalTitle').textContent = 'Edit Device';
+      document.getElementById('unitId').value = device.unit_id;
+      document.getElementById('unitId').disabled = true;
+      document.getElementById('host').value = device.host;
+      document.getElementById('tcpPort').value = device.tcp_port;
+      document.getElementById('ftpPort').value = device.ftp_port || 21;
+      document.getElementById('tcpEnabled').checked = device.tcp_enabled;
+      document.getElementById('ftpEnabled').checked = device.ftp_enabled;
+      document.getElementById('ftpUsername').value = device.ftp_username || '';
+      document.getElementById('ftpPassword').value = device.ftp_password || '';
+      document.getElementById('pollEnabled').checked = device.poll_enabled;
+      document.getElementById('pollInterval').value = device.poll_interval_seconds || 60;
+      toggleFtpCredentials();
+      document.getElementById('deviceModal').classList.add('active');
+    }
+
+    function closeModal() {
+      document.getElementById('deviceModal').classList.remove('active');
+      editingDeviceId = null;
+    }
+
+    function toggleFtpCredentials() {
+      const ftpEnabled = document.getElementById('ftpEnabled').checked;
+      document.getElementById('ftpCredentialsSection').style.display = ftpEnabled ? 'block' : 'none';
+    }
+
+    async function saveDevice(event) {
+      event.preventDefault();
+
+      const unitId = document.getElementById('unitId').value.trim();
+      const payload = {
+        host: document.getElementById('host').value.trim(),
+        tcp_port: parseInt(document.getElementById('tcpPort').value),
+        ftp_port: parseInt(document.getElementById('ftpPort').value),
+        tcp_enabled: document.getElementById('tcpEnabled').checked,
+        ftp_enabled: document.getElementById('ftpEnabled').checked,
+        poll_enabled: document.getElementById('pollEnabled').checked,
+        poll_interval_seconds: parseInt(document.getElementById('pollInterval').value)
+      };
+
+      if (payload.ftp_enabled) {
+        const username = document.getElementById('ftpUsername').value.trim();
+        const password = document.getElementById('ftpPassword').value.trim();
+        if (username) payload.ftp_username = username;
+        if (password) payload.ftp_password = password;
+      }
+
+      try {
+        const url = editingDeviceId
+          ? `/api/nl43/${editingDeviceId}/config`
+          : `/api/nl43/roster`;
+
+        const method = editingDeviceId ? 'PUT' : 'POST';
+
+        const body = editingDeviceId
+          ? payload
+          : { unit_id: unitId, ...payload };
+
+        const res = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showToast(data.detail || 'Failed to save device', 'error');
+          return;
+        }
+
+        showToast(editingDeviceId ? 'Device updated successfully' : 'Device added successfully', 'success');
+        closeModal();
+        await loadRoster();
+      } catch (err) {
+        showToast('Error saving device: ' + err.message, 'error');
+        console.error('Save device error:', err);
+      }
+    }
+
+    async function deleteDevice(unitId) {
+      if (!confirm(`Are you sure you want to delete "${unitId}"?\n\nThis will remove the device configuration but will not affect the physical device.`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/nl43/${unitId}/config`, {
+          method: 'DELETE'
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          showToast(data.detail || 'Failed to delete device', 'error');
+          return;
+        }
+
+        showToast('Device deleted successfully', 'success');
+        await loadRoster();
+      } catch (err) {
+        showToast('Error deleting device: ' + err.message, 'error');
+        console.error('Delete device error:', err);
+      }
+    }
+
+    async function testDevice(unitId) {
+      showToast('Testing device connection...', 'success');
+
+      try {
+        const res = await fetch(`/api/nl43/${unitId}/diagnostics`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          showToast('Device test failed', 'error');
+          return;
+        }
+
+        const statusText = {
+          'pass': 'All systems operational ✓',
+          'fail': 'Connection failed ✗',
+          'degraded': 'Partial connectivity ⚠'
+        };
+
+        showToast(statusText[data.overall_status] || 'Test complete',
+                  data.overall_status === 'pass' ? 'success' : 'error');
+
+        // Reload to update status
+        await loadRoster();
+      } catch (err) {
+        showToast('Error testing device: ' + err.message, 'error');
+        console.error('Test device error:', err);
+      }
+    }
+
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.className = `toast toast-${type} active`;
+
+      setTimeout(() => {
+        toast.classList.remove('active');
+      }, 3000);
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('deviceModal').addEventListener('click', (e) => {
+      if (e.target.id === 'deviceModal') {
+        closeModal();
+      }
+    });
+  </script>
+</body>
+</html>

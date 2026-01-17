@@ -49,6 +49,8 @@ class ConfigPayload(BaseModel):
     ftp_username: str | None = None
     ftp_password: str | None = None
     web_enabled: bool | None = None
+    poll_enabled: bool | None = None
+    poll_interval_seconds: int | None = None
 
     @field_validator("host")
     @classmethod
@@ -74,6 +76,13 @@ class ConfigPayload(BaseModel):
             return v
         if not (1 <= v <= 65535):
             raise ValueError("Port must be between 1 and 65535")
+        return v
+
+    @field_validator("poll_interval_seconds")
+    @classmethod
+    def validate_poll_interval(cls, v):
+        if v is not None and not (10 <= v <= 3600):
+            raise ValueError("Poll interval must be between 10 and 3600 seconds")
         return v
 
 
@@ -127,6 +136,164 @@ def get_global_polling_status(db: Session = Depends(get_db)):
             "poller_running": poller._running,
             "total_devices": len(configs),
             "devices": device_statuses
+        }
+    }
+
+
+@router.get("/roster")
+def get_roster(db: Session = Depends(get_db)):
+    """
+    Get list of all configured devices with their status.
+
+    Returns all NL43Config entries along with their associated status information.
+    Used by the roster page to display all devices in a table.
+
+    Note: Must be defined before /{unit_id} routes to avoid routing conflicts.
+    """
+    configs = db.query(NL43Config).all()
+
+    devices = []
+    for cfg in configs:
+        status = db.query(NL43Status).filter_by(unit_id=cfg.unit_id).first()
+
+        device_data = {
+            "unit_id": cfg.unit_id,
+            "host": cfg.host,
+            "tcp_port": cfg.tcp_port,
+            "ftp_port": cfg.ftp_port,
+            "tcp_enabled": cfg.tcp_enabled,
+            "ftp_enabled": cfg.ftp_enabled,
+            "ftp_username": cfg.ftp_username,
+            "ftp_password": cfg.ftp_password,
+            "web_enabled": cfg.web_enabled,
+            "poll_enabled": cfg.poll_enabled,
+            "poll_interval_seconds": cfg.poll_interval_seconds,
+            "status": None
+        }
+
+        if status:
+            device_data["status"] = {
+                "last_seen": status.last_seen.isoformat() if status.last_seen else None,
+                "measurement_state": status.measurement_state,
+                "is_reachable": status.is_reachable,
+                "consecutive_failures": status.consecutive_failures,
+                "last_success": status.last_success.isoformat() if status.last_success else None,
+                "last_error": status.last_error
+            }
+
+        devices.append(device_data)
+
+    return {
+        "status": "ok",
+        "devices": devices,
+        "total": len(devices)
+    }
+
+
+class RosterCreatePayload(BaseModel):
+    """Payload for creating a new device via roster."""
+    unit_id: str
+    host: str
+    tcp_port: int = 2255
+    ftp_port: int = 21
+    tcp_enabled: bool = True
+    ftp_enabled: bool = False
+    ftp_username: str | None = None
+    ftp_password: str | None = None
+    web_enabled: bool = False
+    poll_enabled: bool = True
+    poll_interval_seconds: int = 60
+
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, v):
+        if v is None:
+            return v
+        # Try to parse as IP address or hostname
+        try:
+            ipaddress.ip_address(v)
+        except ValueError:
+            # Not an IP, check if it's a valid hostname format
+            if not v or len(v) > 253:
+                raise ValueError("Invalid hostname length")
+            # Allow hostnames (basic validation)
+            if not all(c.isalnum() or c in ".-" for c in v):
+                raise ValueError("Host must be a valid IP address or hostname")
+        return v
+
+    @field_validator("tcp_port", "ftp_port")
+    @classmethod
+    def validate_port(cls, v):
+        if v is None:
+            return v
+        if not (1 <= v <= 65535):
+            raise ValueError("Port must be between 1 and 65535")
+        return v
+
+    @field_validator("poll_interval_seconds")
+    @classmethod
+    def validate_poll_interval(cls, v):
+        if v is not None and not (10 <= v <= 3600):
+            raise ValueError("Poll interval must be between 10 and 3600 seconds")
+        return v
+
+
+@router.post("/roster")
+async def create_device(payload: RosterCreatePayload, db: Session = Depends(get_db)):
+    """
+    Create a new device configuration via roster.
+
+    This endpoint allows creating a new device with all configuration options.
+    If a device with the same unit_id already exists, returns a 409 conflict.
+
+    Note: Must be defined before /{unit_id} routes to avoid routing conflicts.
+    """
+    # Check if device already exists
+    existing = db.query(NL43Config).filter_by(unit_id=payload.unit_id).first()
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Device with unit_id '{payload.unit_id}' already exists. Use PUT /{payload.unit_id}/config to update."
+        )
+
+    # Create new config
+    cfg = NL43Config(
+        unit_id=payload.unit_id,
+        host=payload.host,
+        tcp_port=payload.tcp_port,
+        ftp_port=payload.ftp_port,
+        tcp_enabled=payload.tcp_enabled,
+        ftp_enabled=payload.ftp_enabled,
+        ftp_username=payload.ftp_username,
+        ftp_password=payload.ftp_password,
+        web_enabled=payload.web_enabled,
+        poll_enabled=payload.poll_enabled,
+        poll_interval_seconds=payload.poll_interval_seconds
+    )
+
+    db.add(cfg)
+    db.commit()
+    db.refresh(cfg)
+
+    logger.info(f"Created new device config for {payload.unit_id}")
+
+    # If TCP is enabled, automatically disable sleep mode
+    if cfg.tcp_enabled and cfg.host and cfg.tcp_port:
+        logger.info(f"TCP enabled for {payload.unit_id}, ensuring sleep mode is disabled")
+        client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port)
+        await ensure_sleep_mode_disabled(client, payload.unit_id)
+
+    return {
+        "status": "ok",
+        "message": f"Device {payload.unit_id} created successfully",
+        "data": {
+            "unit_id": cfg.unit_id,
+            "host": cfg.host,
+            "tcp_port": cfg.tcp_port,
+            "tcp_enabled": cfg.tcp_enabled,
+            "ftp_enabled": cfg.ftp_enabled,
+            "poll_enabled": cfg.poll_enabled,
+            "poll_interval_seconds": cfg.poll_interval_seconds
         }
     }
 
@@ -207,6 +374,10 @@ async def upsert_config(unit_id: str, payload: ConfigPayload, db: Session = Depe
         cfg.ftp_password = payload.ftp_password
     if payload.web_enabled is not None:
         cfg.web_enabled = payload.web_enabled
+    if payload.poll_enabled is not None:
+        cfg.poll_enabled = payload.poll_enabled
+    if payload.poll_interval_seconds is not None:
+        cfg.poll_interval_seconds = payload.poll_interval_seconds
 
     db.commit()
     db.refresh(cfg)
@@ -228,6 +399,8 @@ async def upsert_config(unit_id: str, payload: ConfigPayload, db: Session = Depe
             "tcp_enabled": cfg.tcp_enabled,
             "ftp_enabled": cfg.ftp_enabled,
             "web_enabled": cfg.web_enabled,
+            "poll_enabled": cfg.poll_enabled,
+            "poll_interval_seconds": cfg.poll_interval_seconds,
         },
     }
 
