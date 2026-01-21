@@ -717,29 +717,89 @@ class NL43Client:
         Returns:
             List of file info dicts with 'name', 'size', 'modified', 'is_dir'
         """
-        logger.info(f"Listing FTP files on {self.device_key} at {remote_path}")
+        logger.info(f"[FTP-LIST] === Starting FTP file listing for {self.device_key} ===")
+        logger.info(f"[FTP-LIST] Target path: {remote_path}")
+        logger.info(f"[FTP-LIST] Host: {self.host}, Port: {self.ftp_port}, User: {self.ftp_username}")
 
         def _list_ftp_sync():
             """Synchronous FTP listing using ftplib for NL-43 devices."""
+            import socket
             ftp = FTP()
             ftp.set_debuglevel(2)  # Enable FTP debugging
             try:
-                # Connect and login
-                logger.info(f"Connecting to FTP server at {self.host}:{self.ftp_port}")
-                ftp.connect(self.host, self.ftp_port, timeout=10)
-                logger.info(f"Logging in with username: {self.ftp_username}")
-                ftp.login(self.ftp_username, self.ftp_password)
-                ftp.set_pasv(False)  # Use active mode (required for NL-43 devices)
-                logger.info("FTP connection established in active mode")
+                # Phase 1: TCP Connection
+                logger.info(f"[FTP-LIST] Phase 1: Initiating TCP connection to {self.host}:{self.ftp_port}")
+                logger.info(f"[FTP-LIST] Connection timeout: 10 seconds")
+                try:
+                    ftp.connect(self.host, self.ftp_port, timeout=10)
+                    logger.info(f"[FTP-LIST] Phase 1 SUCCESS: TCP connection established")
+                    # Log socket details
+                    try:
+                        local_addr = ftp.sock.getsockname()
+                        remote_addr = ftp.sock.getpeername()
+                        logger.info(f"[FTP-LIST] Control channel - Local: {local_addr[0]}:{local_addr[1]}, Remote: {remote_addr[0]}:{remote_addr[1]}")
+                    except Exception as sock_info_err:
+                        logger.warning(f"[FTP-LIST] Could not get socket info: {sock_info_err}")
+                except socket.timeout as timeout_err:
+                    logger.error(f"[FTP-LIST] Phase 1 FAILED: TCP connection TIMEOUT after 10s to {self.host}:{self.ftp_port}")
+                    logger.error(f"[FTP-LIST] This means the device is unreachable or FTP port is blocked/closed")
+                    raise
+                except socket.error as sock_err:
+                    logger.error(f"[FTP-LIST] Phase 1 FAILED: Socket error to {self.host}:{self.ftp_port}")
+                    logger.error(f"[FTP-LIST] Socket error: {type(sock_err).__name__}: {sock_err}, errno={getattr(sock_err, 'errno', 'N/A')}")
+                    raise
+                except Exception as conn_err:
+                    logger.error(f"[FTP-LIST] Phase 1 FAILED: {type(conn_err).__name__}: {conn_err}")
+                    raise
 
-                # Change to target directory
+                # Phase 2: Authentication
+                logger.info(f"[FTP-LIST] Phase 2: Authenticating as '{self.ftp_username}'")
+                try:
+                    ftp.login(self.ftp_username, self.ftp_password)
+                    logger.info(f"[FTP-LIST] Phase 2 SUCCESS: Authentication successful")
+                except Exception as auth_err:
+                    logger.error(f"[FTP-LIST] Phase 2 FAILED: Auth error for user '{self.ftp_username}': {auth_err}")
+                    raise
+
+                # Phase 3: Set Active Mode
+                logger.info(f"[FTP-LIST] Phase 3: Setting ACTIVE mode (PASV=False)")
+                logger.info(f"[FTP-LIST] NOTE: Active mode requires the NL-43 device to connect BACK to this server on a data port")
+                logger.info(f"[FTP-LIST] If firewall blocks incoming connections, data transfer will timeout")
+                ftp.set_pasv(False)
+                logger.info(f"[FTP-LIST] Phase 3 SUCCESS: Active mode enabled")
+
+                # Phase 4: Change directory
                 if remote_path != "/":
-                    ftp.cwd(remote_path)
+                    logger.info(f"[FTP-LIST] Phase 4: Changing to directory: {remote_path}")
+                    try:
+                        ftp.cwd(remote_path)
+                        logger.info(f"[FTP-LIST] Phase 4 SUCCESS: Changed to {remote_path}")
+                    except Exception as cwd_err:
+                        logger.error(f"[FTP-LIST] Phase 4 FAILED: Could not change to '{remote_path}': {cwd_err}")
+                        raise
+                else:
+                    logger.info(f"[FTP-LIST] Phase 4: Staying in root directory")
 
-                # Get directory listing with details
+                # Phase 5: Get directory listing (THIS IS WHERE DATA CHANNEL IS USED)
+                logger.info(f"[FTP-LIST] Phase 5: Sending LIST command (data channel required)")
+                logger.info(f"[FTP-LIST] This step opens a data channel - device must connect back in active mode")
                 files = []
                 lines = []
-                ftp.retrlines('LIST', lines.append)
+                try:
+                    ftp.retrlines('LIST', lines.append)
+                    logger.info(f"[FTP-LIST] Phase 5 SUCCESS: LIST command completed, received {len(lines)} lines")
+                except socket.timeout as list_timeout:
+                    logger.error(f"[FTP-LIST] Phase 5 FAILED: DATA CHANNEL TIMEOUT during LIST command")
+                    logger.error(f"[FTP-LIST] This usually means:")
+                    logger.error(f"[FTP-LIST]   1. Firewall is blocking incoming data connections from the NL-43")
+                    logger.error(f"[FTP-LIST]   2. NAT is preventing the device from connecting back")
+                    logger.error(f"[FTP-LIST]   3. Network route between device and server is blocked")
+                    logger.error(f"[FTP-LIST] In active FTP mode, the server sends PORT command with its IP:port,")
+                    logger.error(f"[FTP-LIST] and the device initiates a connection TO the server for data transfer")
+                    raise
+                except Exception as list_err:
+                    logger.error(f"[FTP-LIST] Phase 5 FAILED: Error during LIST: {type(list_err).__name__}: {list_err}")
+                    raise
 
                 for line in lines:
                     # Parse Unix-style ls output
@@ -799,20 +859,24 @@ class NL43Client:
                     files.append(file_info)
                     logger.debug(f"Found file: {file_info}")
 
-                logger.info(f"Found {len(files)} files/directories on {self.device_key}")
+                logger.info(f"[FTP-LIST] === COMPLETE: Found {len(files)} files/directories on {self.device_key} ===")
                 return files
 
             finally:
+                logger.info(f"[FTP-LIST] Closing FTP connection")
                 try:
                     ftp.quit()
-                except:
-                    pass
+                    logger.info(f"[FTP-LIST] FTP connection closed cleanly")
+                except Exception as quit_err:
+                    logger.warning(f"[FTP-LIST] Error during FTP quit (non-fatal): {quit_err}")
 
         try:
             # Run synchronous FTP in thread pool
             return await asyncio.to_thread(_list_ftp_sync)
         except Exception as e:
-            logger.error(f"Failed to list FTP files on {self.device_key}: {e}")
+            logger.error(f"[FTP-LIST] === FAILED: {self.device_key} - {type(e).__name__}: {e} ===")
+            import traceback
+            logger.error(f"[FTP-LIST] Full traceback:\n{traceback.format_exc()}")
             raise ConnectionError(f"FTP connection failed: {str(e)}")
 
     async def download_ftp_file(self, remote_path: str, local_path: str):
@@ -822,35 +886,86 @@ class NL43Client:
             remote_path: Full path to file on the device
             local_path: Local path where file will be saved
         """
-        logger.info(f"Downloading {remote_path} from {self.device_key} to {local_path}")
+        logger.info(f"[FTP-DOWNLOAD] === Starting FTP download for {self.device_key} ===")
+        logger.info(f"[FTP-DOWNLOAD] Remote path: {remote_path}")
+        logger.info(f"[FTP-DOWNLOAD] Local path: {local_path}")
+        logger.info(f"[FTP-DOWNLOAD] Host: {self.host}, Port: {self.ftp_port}, User: {self.ftp_username}")
 
         def _download_ftp_sync():
             """Synchronous FTP download using ftplib (supports active mode)."""
+            import socket
             ftp = FTP()
-            ftp.set_debuglevel(0)
+            ftp.set_debuglevel(2)  # Enable verbose FTP debugging
             try:
-                # Connect and login
-                ftp.connect(self.host, self.ftp_port, timeout=10)
-                ftp.login(self.ftp_username, self.ftp_password)
-                ftp.set_pasv(False)  # Force active mode
+                # Phase 1: TCP Connection
+                logger.info(f"[FTP-DOWNLOAD] Phase 1: Connecting to {self.host}:{self.ftp_port}")
+                try:
+                    ftp.connect(self.host, self.ftp_port, timeout=10)
+                    logger.info(f"[FTP-DOWNLOAD] Phase 1 SUCCESS: TCP connection established")
+                    try:
+                        local_addr = ftp.sock.getsockname()
+                        remote_addr = ftp.sock.getpeername()
+                        logger.info(f"[FTP-DOWNLOAD] Control channel - Local: {local_addr[0]}:{local_addr[1]}, Remote: {remote_addr[0]}:{remote_addr[1]}")
+                    except Exception as sock_info_err:
+                        logger.warning(f"[FTP-DOWNLOAD] Could not get socket info: {sock_info_err}")
+                except socket.timeout as timeout_err:
+                    logger.error(f"[FTP-DOWNLOAD] Phase 1 FAILED: TCP connection TIMEOUT to {self.host}:{self.ftp_port}")
+                    raise
+                except socket.error as sock_err:
+                    logger.error(f"[FTP-DOWNLOAD] Phase 1 FAILED: Socket error: {type(sock_err).__name__}: {sock_err}")
+                    raise
+                except Exception as conn_err:
+                    logger.error(f"[FTP-DOWNLOAD] Phase 1 FAILED: {type(conn_err).__name__}: {conn_err}")
+                    raise
 
-                # Download file
-                with open(local_path, 'wb') as f:
-                    ftp.retrbinary(f'RETR {remote_path}', f.write)
+                # Phase 2: Authentication
+                logger.info(f"[FTP-DOWNLOAD] Phase 2: Authenticating as '{self.ftp_username}'")
+                try:
+                    ftp.login(self.ftp_username, self.ftp_password)
+                    logger.info(f"[FTP-DOWNLOAD] Phase 2 SUCCESS: Authentication successful")
+                except Exception as auth_err:
+                    logger.error(f"[FTP-DOWNLOAD] Phase 2 FAILED: Auth error: {auth_err}")
+                    raise
 
-                logger.info(f"Successfully downloaded {remote_path} to {local_path}")
+                # Phase 3: Set Active Mode
+                logger.info(f"[FTP-DOWNLOAD] Phase 3: Setting ACTIVE mode (PASV=False)")
+                ftp.set_pasv(False)
+                logger.info(f"[FTP-DOWNLOAD] Phase 3 SUCCESS: Active mode enabled")
+
+                # Phase 4: Download file (THIS IS WHERE DATA CHANNEL IS USED)
+                logger.info(f"[FTP-DOWNLOAD] Phase 4: Starting RETR {remote_path}")
+                logger.info(f"[FTP-DOWNLOAD] Data channel will be established - device connects back in active mode")
+                try:
+                    with open(local_path, 'wb') as f:
+                        ftp.retrbinary(f'RETR {remote_path}', f.write)
+                    import os
+                    file_size = os.path.getsize(local_path)
+                    logger.info(f"[FTP-DOWNLOAD] Phase 4 SUCCESS: Downloaded {file_size} bytes to {local_path}")
+                except socket.timeout as dl_timeout:
+                    logger.error(f"[FTP-DOWNLOAD] Phase 4 FAILED: DATA CHANNEL TIMEOUT during download")
+                    logger.error(f"[FTP-DOWNLOAD] This usually means firewall/NAT is blocking the data connection")
+                    raise
+                except Exception as dl_err:
+                    logger.error(f"[FTP-DOWNLOAD] Phase 4 FAILED: {type(dl_err).__name__}: {dl_err}")
+                    raise
+
+                logger.info(f"[FTP-DOWNLOAD] === COMPLETE: {remote_path} downloaded successfully ===")
 
             finally:
+                logger.info(f"[FTP-DOWNLOAD] Closing FTP connection")
                 try:
                     ftp.quit()
-                except:
-                    pass
+                    logger.info(f"[FTP-DOWNLOAD] FTP connection closed cleanly")
+                except Exception as quit_err:
+                    logger.warning(f"[FTP-DOWNLOAD] Error during FTP quit (non-fatal): {quit_err}")
 
         try:
             # Run synchronous FTP in thread pool
             await asyncio.to_thread(_download_ftp_sync)
         except Exception as e:
-            logger.error(f"Failed to download {remote_path} from {self.device_key}: {e}")
+            logger.error(f"[FTP-DOWNLOAD] === FAILED: {self.device_key} - {type(e).__name__}: {e} ===")
+            import traceback
+            logger.error(f"[FTP-DOWNLOAD] Full traceback:\n{traceback.format_exc()}")
             raise ConnectionError(f"FTP download failed: {str(e)}")
 
     async def download_ftp_folder(self, remote_path: str, zip_path: str):
@@ -864,24 +979,52 @@ class NL43Client:
             remote_path: Full path to folder on the device (e.g., "/NL-43/Auto_0000")
             zip_path: Local path where the ZIP file will be saved
         """
-        logger.info(f"Downloading folder {remote_path} from {self.device_key} as ZIP to {zip_path}")
+        logger.info(f"[FTP-FOLDER] === Starting FTP folder download for {self.device_key} ===")
+        logger.info(f"[FTP-FOLDER] Remote folder: {remote_path}")
+        logger.info(f"[FTP-FOLDER] ZIP destination: {zip_path}")
+        logger.info(f"[FTP-FOLDER] Host: {self.host}, Port: {self.ftp_port}, User: {self.ftp_username}")
 
         def _download_folder_sync():
             """Synchronous FTP folder download and ZIP creation."""
+            import socket
             ftp = FTP()
-            ftp.set_debuglevel(0)
+            ftp.set_debuglevel(2)  # Enable verbose FTP debugging
+            files_downloaded = 0
+            folders_processed = 0
 
             # Create a temporary directory for downloaded files
             with tempfile.TemporaryDirectory() as temp_dir:
                 try:
-                    # Connect and login
-                    ftp.connect(self.host, self.ftp_port, timeout=10)
+                    # Phase 1: Connect and authenticate
+                    logger.info(f"[FTP-FOLDER] Phase 1: Connecting to {self.host}:{self.ftp_port}")
+                    try:
+                        ftp.connect(self.host, self.ftp_port, timeout=10)
+                        logger.info(f"[FTP-FOLDER] Phase 1 SUCCESS: TCP connection established")
+                        try:
+                            local_addr = ftp.sock.getsockname()
+                            remote_addr = ftp.sock.getpeername()
+                            logger.info(f"[FTP-FOLDER] Control channel - Local: {local_addr[0]}:{local_addr[1]}, Remote: {remote_addr[0]}:{remote_addr[1]}")
+                        except Exception as sock_info_err:
+                            logger.warning(f"[FTP-FOLDER] Could not get socket info: {sock_info_err}")
+                    except socket.timeout as timeout_err:
+                        logger.error(f"[FTP-FOLDER] Phase 1 FAILED: TCP connection TIMEOUT")
+                        raise
+                    except Exception as conn_err:
+                        logger.error(f"[FTP-FOLDER] Phase 1 FAILED: {type(conn_err).__name__}: {conn_err}")
+                        raise
+
+                    logger.info(f"[FTP-FOLDER] Authenticating as '{self.ftp_username}'")
                     ftp.login(self.ftp_username, self.ftp_password)
+                    logger.info(f"[FTP-FOLDER] Authentication successful")
+
                     ftp.set_pasv(False)  # Force active mode
+                    logger.info(f"[FTP-FOLDER] Active mode enabled (PASV=False)")
 
                     def download_recursive(ftp_path: str, local_path: str):
                         """Recursively download files and directories."""
-                        logger.info(f"Processing folder: {ftp_path}")
+                        nonlocal files_downloaded, folders_processed
+                        folders_processed += 1
+                        logger.info(f"[FTP-FOLDER] Processing folder #{folders_processed}: {ftp_path}")
 
                         # Create local directory
                         os.makedirs(local_path, exist_ok=True)
@@ -889,10 +1032,16 @@ class NL43Client:
                         # List contents
                         try:
                             items = []
+                            logger.info(f"[FTP-FOLDER] Changing to directory: {ftp_path}")
                             ftp.cwd(ftp_path)
+                            logger.info(f"[FTP-FOLDER] Listing contents of {ftp_path}")
                             ftp.retrlines('LIST', items.append)
+                            logger.info(f"[FTP-FOLDER] Found {len(items)} items in {ftp_path}")
+                        except socket.timeout as list_timeout:
+                            logger.error(f"[FTP-FOLDER] TIMEOUT listing {ftp_path} - data channel issue")
+                            return
                         except Exception as e:
-                            logger.error(f"Failed to list {ftp_path}: {e}")
+                            logger.error(f"[FTP-FOLDER] Failed to list {ftp_path}: {type(e).__name__}: {e}")
                             return
 
                         for item in items:
@@ -918,19 +1067,26 @@ class NL43Client:
                             else:
                                 # Download file
                                 try:
-                                    logger.info(f"Downloading file: {full_remote_path}")
+                                    logger.info(f"[FTP-FOLDER] Downloading file #{files_downloaded + 1}: {full_remote_path}")
                                     with open(full_local_path, 'wb') as f:
                                         ftp.retrbinary(f'RETR {full_remote_path}', f.write)
+                                    files_downloaded += 1
+                                    file_size = os.path.getsize(full_local_path)
+                                    logger.info(f"[FTP-FOLDER] Downloaded: {full_remote_path} ({file_size} bytes)")
+                                except socket.timeout as dl_timeout:
+                                    logger.error(f"[FTP-FOLDER] TIMEOUT downloading {full_remote_path}")
                                 except Exception as e:
-                                    logger.error(f"Failed to download {full_remote_path}: {e}")
+                                    logger.error(f"[FTP-FOLDER] Failed to download {full_remote_path}: {type(e).__name__}: {e}")
 
                     # Download entire folder structure
                     folder_name = os.path.basename(remote_path.rstrip('/'))
                     local_folder = os.path.join(temp_dir, folder_name)
                     download_recursive(remote_path, local_folder)
 
+                    logger.info(f"[FTP-FOLDER] Download complete: {files_downloaded} files from {folders_processed} folders")
+
                     # Create ZIP archive
-                    logger.info(f"Creating ZIP archive: {zip_path}")
+                    logger.info(f"[FTP-FOLDER] Creating ZIP archive: {zip_path}")
                     with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
                         for root, dirs, files in os.walk(local_folder):
                             for file in files:
@@ -938,19 +1094,24 @@ class NL43Client:
                                 # Calculate relative path for ZIP archive
                                 arcname = os.path.relpath(file_path, temp_dir)
                                 zipf.write(file_path, arcname)
-                                logger.info(f"Added to ZIP: {arcname}")
+                                logger.debug(f"[FTP-FOLDER] Added to ZIP: {arcname}")
 
-                    logger.info(f"Successfully created ZIP archive: {zip_path}")
+                    zip_size = os.path.getsize(zip_path)
+                    logger.info(f"[FTP-FOLDER] === COMPLETE: ZIP created ({zip_size} bytes) ===")
 
                 finally:
+                    logger.info(f"[FTP-FOLDER] Closing FTP connection")
                     try:
                         ftp.quit()
-                    except:
-                        pass
+                        logger.info(f"[FTP-FOLDER] FTP connection closed cleanly")
+                    except Exception as quit_err:
+                        logger.warning(f"[FTP-FOLDER] Error during FTP quit (non-fatal): {quit_err}")
 
         try:
             # Run synchronous FTP folder download in thread pool
             await asyncio.to_thread(_download_folder_sync)
         except Exception as e:
-            logger.error(f"Failed to download folder {remote_path} from {self.device_key}: {e}")
+            logger.error(f"[FTP-FOLDER] === FAILED: {self.device_key} - {type(e).__name__}: {e} ===")
+            import traceback
+            logger.error(f"[FTP-FOLDER] Full traceback:\n{traceback.format_exc()}")
             raise ConnectionError(f"FTP folder download failed: {str(e)}")
