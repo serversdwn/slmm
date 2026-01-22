@@ -562,6 +562,104 @@ async def stop_measurement(unit_id: str, db: Session = Depends(get_db)):
     return {"status": "ok", "message": "Measurement stopped"}
 
 
+# ============================================================================
+# CYCLE COMMANDS (for scheduled automation)
+# ============================================================================
+
+class StartCyclePayload(BaseModel):
+    """Payload for start_cycle endpoint."""
+    sync_clock: bool = Field(True, description="Whether to sync device clock to server time")
+
+
+class StopCyclePayload(BaseModel):
+    """Payload for stop_cycle endpoint."""
+    download: bool = Field(True, description="Whether to download measurement data")
+    download_path: str | None = Field(None, description="Custom path for ZIP file (optional)")
+
+
+@router.post("/{unit_id}/start-cycle")
+async def start_cycle(unit_id: str, payload: StartCyclePayload = None, db: Session = Depends(get_db)):
+    """
+    Execute complete start cycle for scheduled automation:
+    1. Sync device clock to server time (if sync_clock=True)
+    2. Find next safe index (increment, check overwrite, repeat if needed)
+    3. Start measurement
+
+    Use this instead of /start when automating scheduled measurements.
+    This ensures the device is properly prepared before recording begins.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    payload = payload or StartCyclePayload()
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
+
+    try:
+        # Ensure sleep mode is disabled before starting
+        await ensure_sleep_mode_disabled(client, unit_id)
+
+        # Execute the full start cycle
+        result = await client.start_cycle(sync_clock=payload.sync_clock)
+
+        # Update status in database
+        snap = await client.request_dod()
+        snap.unit_id = unit_id
+        persist_snapshot(snap, db)
+
+        logger.info(f"Start cycle completed for {unit_id}: index {result['old_index']} -> {result['new_index']}")
+        return {"status": "ok", "unit_id": unit_id, **result}
+
+    except Exception as e:
+        logger.error(f"Start cycle failed for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@router.post("/{unit_id}/stop-cycle")
+async def stop_cycle(unit_id: str, payload: StopCyclePayload = None, db: Session = Depends(get_db)):
+    """
+    Execute complete stop cycle for scheduled automation:
+    1. Stop measurement
+    2. Enable FTP
+    3. Download measurement folder (matching current index)
+    4. Verify download succeeded
+
+    Use this instead of /stop when automating scheduled measurements.
+    This ensures data is properly saved and downloaded before the next session.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    if not cfg.tcp_enabled:
+        raise HTTPException(status_code=403, detail="TCP communication is disabled for this device")
+
+    payload = payload or StopCyclePayload()
+    client = NL43Client(cfg.host, cfg.tcp_port, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password, ftp_port=cfg.ftp_port or 21)
+
+    try:
+        # Execute the full stop cycle
+        result = await client.stop_cycle(
+            download=payload.download,
+            download_path=payload.download_path,
+        )
+
+        # Update status in database
+        snap = await client.request_dod()
+        snap.unit_id = unit_id
+        persist_snapshot(snap, db)
+
+        logger.info(f"Stop cycle completed for {unit_id}: folder={result.get('downloaded_folder')}, success={result.get('download_success')}")
+        return {"status": "ok", "unit_id": unit_id, **result}
+
+    except Exception as e:
+        logger.error(f"Stop cycle failed for {unit_id}: {e}")
+        raise HTTPException(status_code=502, detail=str(e))
+
+
 @router.post("/{unit_id}/store")
 async def manual_store(unit_id: str, db: Session = Depends(get_db)):
     """Manually store measurement data to SD card."""

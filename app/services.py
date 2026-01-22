@@ -1115,3 +1115,164 @@ class NL43Client:
             import traceback
             logger.error(f"[FTP-FOLDER] Full traceback:\n{traceback.format_exc()}")
             raise ConnectionError(f"FTP folder download failed: {str(e)}")
+
+    # ========================================================================
+    # Cycle Commands (for scheduled automation)
+    # ========================================================================
+
+    async def start_cycle(self, sync_clock: bool = True, max_index_attempts: int = 100) -> dict:
+        """
+        Execute complete start cycle for scheduled automation:
+        1. Sync device clock to server time
+        2. Find next safe index (increment, check overwrite, repeat if needed)
+        3. Start measurement
+
+        Args:
+            sync_clock: Whether to sync device clock to server time (default: True)
+            max_index_attempts: Maximum attempts to find an unused index (default: 100)
+
+        Returns:
+            dict with clock_synced, old_index, new_index, attempts_made, started
+        """
+        logger.info(f"[START-CYCLE] === Starting measurement cycle on {self.device_key} ===")
+
+        result = {
+            "clock_synced": False,
+            "server_time": None,
+            "old_index": None,
+            "new_index": None,
+            "attempts_made": 0,
+            "started": False,
+        }
+
+        # Step 1: Sync clock to server time
+        if sync_clock:
+            # Use configured timezone
+            server_now = datetime.now(timezone.utc) + TIMEZONE_OFFSET
+            server_time = server_now.strftime("%Y/%m/%d %H:%M:%S")
+            logger.info(f"[START-CYCLE] Step 1: Syncing clock to {server_time} ({TIMEZONE_NAME})")
+            await self.set_clock(server_time)
+            result["clock_synced"] = True
+            result["server_time"] = server_time
+            logger.info(f"[START-CYCLE] Clock synced successfully")
+        else:
+            logger.info(f"[START-CYCLE] Step 1: Skipping clock sync (sync_clock=False)")
+
+        # Step 2: Find next safe index with overwrite protection
+        logger.info(f"[START-CYCLE] Step 2: Finding safe index with overwrite protection")
+        current_index_str = await self.get_index_number()
+        current_index = int(current_index_str)
+        result["old_index"] = current_index
+        logger.info(f"[START-CYCLE] Current index: {current_index}")
+
+        test_index = current_index + 1
+        attempts = 0
+
+        while attempts < max_index_attempts:
+            test_index = test_index % 10000  # Wrap at 9999
+            await self.set_index_number(test_index)
+            attempts += 1
+
+            # Check if this index is safe (no existing data)
+            overwrite_status = await self.get_overwrite_status()
+            logger.info(f"[START-CYCLE] Index {test_index:04d}: overwrite status = {overwrite_status}")
+
+            if overwrite_status == "None":
+                # Safe to use this index
+                result["new_index"] = test_index
+                result["attempts_made"] = attempts
+                logger.info(f"[START-CYCLE] Found safe index {test_index:04d} after {attempts} attempt(s)")
+                break
+
+            # Data exists, try next index
+            test_index += 1
+
+            if test_index == current_index:
+                # Wrapped around completely - all indices have data
+                logger.error(f"[START-CYCLE] All indices have data! Device storage is full.")
+                raise Exception("All indices have data. Download and clear device storage.")
+
+        if result["new_index"] is None:
+            logger.error(f"[START-CYCLE] Could not find empty index after {max_index_attempts} attempts")
+            raise Exception(f"Could not find empty index after {max_index_attempts} attempts")
+
+        # Step 3: Start measurement
+        logger.info(f"[START-CYCLE] Step 3: Starting measurement")
+        await self.start()
+        result["started"] = True
+        logger.info(f"[START-CYCLE] === Measurement started successfully ===")
+
+        return result
+
+    async def stop_cycle(self, download: bool = True, download_path: str = None) -> dict:
+        """
+        Execute complete stop cycle for scheduled automation:
+        1. Stop measurement
+        2. Enable FTP
+        3. Download measurement folder (matching current index)
+        4. Verify download succeeded
+
+        Args:
+            download: Whether to download measurement data (default: True)
+            download_path: Custom path for ZIP file (default: data/downloads/{device_key}/Auto_XXXX.zip)
+
+        Returns:
+            dict with stopped, ftp_enabled, download_attempted, download_success, etc.
+        """
+        logger.info(f"[STOP-CYCLE] === Stopping measurement cycle on {self.device_key} ===")
+
+        result = {
+            "stopped": False,
+            "ftp_enabled": False,
+            "download_attempted": False,
+            "download_success": False,
+            "downloaded_folder": None,
+            "local_path": None,
+        }
+
+        # Step 1: Stop measurement
+        logger.info(f"[STOP-CYCLE] Step 1: Stopping measurement")
+        await self.stop()
+        result["stopped"] = True
+        logger.info(f"[STOP-CYCLE] Measurement stopped")
+
+        # Step 2: Enable FTP
+        logger.info(f"[STOP-CYCLE] Step 2: Enabling FTP")
+        await self.enable_ftp()
+        result["ftp_enabled"] = True
+        logger.info(f"[STOP-CYCLE] FTP enabled")
+
+        if not download:
+            logger.info(f"[STOP-CYCLE] === Cycle complete (download=False) ===")
+            return result
+
+        # Step 3: Get current index to know which folder to download
+        logger.info(f"[STOP-CYCLE] Step 3: Determining folder to download")
+        current_index_str = await self.get_index_number()
+        # Pad to 4 digits for folder name
+        folder_name = f"Auto_{current_index_str.zfill(4)}"
+        remote_path = f"/NL-43/{folder_name}"
+        result["downloaded_folder"] = folder_name
+        result["download_attempted"] = True
+        logger.info(f"[STOP-CYCLE] Will download folder: {remote_path}")
+
+        # Step 4: Download the folder
+        if download_path is None:
+            # Default path: data/downloads/{device_key}/Auto_XXXX.zip
+            download_dir = f"data/downloads/{self.device_key}"
+            os.makedirs(download_dir, exist_ok=True)
+            download_path = os.path.join(download_dir, f"{folder_name}.zip")
+
+        logger.info(f"[STOP-CYCLE] Step 4: Downloading to {download_path}")
+        try:
+            await self.download_ftp_folder(remote_path, download_path)
+            result["download_success"] = True
+            result["local_path"] = download_path
+            logger.info(f"[STOP-CYCLE] Download successful: {download_path}")
+        except Exception as e:
+            logger.error(f"[STOP-CYCLE] Download failed: {e}")
+            # Don't raise - the stop was successful, just the download failed
+            result["download_error"] = str(e)
+
+        logger.info(f"[STOP-CYCLE] === Cycle complete ===")
+        return result
