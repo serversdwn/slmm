@@ -8,7 +8,7 @@ Backend API service for controlling and monitoring Rion NL-43/NL-53 Sound Level 
 
 SLMM is a standalone backend module that provides REST API routing and command translation for NL43/NL53 sound level meters. This service acts as a bridge between the hardware devices and frontend applications, handling all device communication, data persistence, and protocol management.
 
-**Note:** This is a backend-only service. Actual user interfacing is done via [SFM/Terra-View](https://github.com/your-org/terra-view) frontend applications.
+**Note:** This is a backend-only service. Actual user interfacing is done via customized front ends or cli.
 
 ## Features
 
@@ -27,7 +27,7 @@ SLMM is a standalone backend module that provides REST API routing and command t
 
 ```
 ┌─────────────────┐         ┌──────────────────────────────┐         ┌─────────────────┐
-│  Terra-View UI  │◄───────►│  SLMM API                    │◄───────►│  NL43/NL53      │
+│                 │◄───────►│  SLMM API                    │◄───────►│  NL43/NL53      │
 │  (Frontend)     │  HTTP   │  • REST Endpoints            │  TCP    │  Sound Meters   │
 └─────────────────┘         │  • WebSocket Streaming       │         └─────────────────┘
                             │  • Background Poller ⭐ NEW  │                ▲
