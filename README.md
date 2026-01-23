@@ -1,6 +1,6 @@
 # SLMM - Sound Level Meter Manager
 
-**Version 0.2.0**
+**Version 0.2.1**
 
 Backend API service for controlling and monitoring Rion NL-43/NL-53 Sound Level Meters via TCP and FTP protocols.
 

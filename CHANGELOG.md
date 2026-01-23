@@ -5,6 +5,17 @@ All notable changes to SLMM (Sound Level Meter Manager) will be documented in th
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-01-23
+
+### Added
+- **Roster management**: UI and API endpoints for managing device rosters.
+- **Delete config endpoint**: Remove device configuration alongside cached status data.
+- **Scheduler hooks**: `start_cycle` and `stop_cycle` helpers for Terra-View scheduling integration.
+
+### Changed
+- **FTP logging**: Connection, authentication, and transfer phases now log explicitly.
+- **Documentation**: Reorganized docs/scripts and updated API notes for FTP/TCP verification.
+
 ## [0.2.0] - 2026-01-15
 
 ### Added
@@ -135,5 +146,6 @@ None. This release is fully backward-compatible with v0.1.x. All existing endpoi
 
 ## Version History Summary
 
+- **v0.2.1** (2026-01-23) - Roster management, scheduler hooks, FTP logging, doc cleanup
 - **v0.2.0** (2026-01-15) - Background Polling System
 - **v0.1.0** (2025-12-XX) - Initial Release
