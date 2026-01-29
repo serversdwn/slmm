@@ -81,14 +81,14 @@ class ConfigPayload(BaseModel):
     @field_validator("poll_interval_seconds")
     @classmethod
     def validate_poll_interval(cls, v):
-        if v is not None and not (10 <= v <= 3600):
-            raise ValueError("Poll interval must be between 10 and 3600 seconds")
+        if v is not None and not (30 <= v <= 21600):
+            raise ValueError("Poll interval must be between 30 and 21600 seconds (30s to 6 hours)")
         return v
 
 
 class PollingConfigPayload(BaseModel):
     """Payload for updating device polling configuration."""
-    poll_interval_seconds: int | None = Field(None, ge=10, le=3600, description="Polling interval in seconds (10-3600)")
+    poll_interval_seconds: int | None = Field(None, ge=30, le=21600, description="Polling interval in seconds (30s to 6 hours)")
     poll_enabled: bool | None = Field(None, description="Enable or disable background polling for this device")
 
 
@@ -233,8 +233,8 @@ class RosterCreatePayload(BaseModel):
     @field_validator("poll_interval_seconds")
     @classmethod
     def validate_poll_interval(cls, v):
-        if v is not None and not (10 <= v <= 3600):
-            raise ValueError("Poll interval must be between 10 and 3600 seconds")
+        if v is not None and not (30 <= v <= 21600):
+            raise ValueError("Poll interval must be between 30 and 21600 seconds (30s to 6 hours)")
         return v
 
 
@@ -1880,7 +1880,7 @@ def update_polling_config(
     """
     Update background polling configuration for a device.
 
-    Allows configuring the polling interval (10-3600 seconds) and
+    Allows configuring the polling interval (30-21600 seconds, i.e. 30s to 6 hours) and
     enabling/disabling automatic background polling per device.
 
     Changes take effect on the next polling cycle.
@@ -1891,10 +1891,15 @@ def update_polling_config(
 
     # Update interval if provided
     if payload.poll_interval_seconds is not None:
-        if payload.poll_interval_seconds < 10:
+        if payload.poll_interval_seconds < 30:
             raise HTTPException(
                 status_code=400,
-                detail="Polling interval must be at least 10 seconds"
+                detail="Polling interval must be at least 30 seconds"
+            )
+        if payload.poll_interval_seconds > 21600:
+            raise HTTPException(
+                status_code=400,
+                detail="Polling interval must be at most 21600 seconds (6 hours)"
             )
         cfg.poll_interval_seconds = payload.poll_interval_seconds
 

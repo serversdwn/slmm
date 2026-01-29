@@ -25,7 +25,7 @@ class BackgroundPoller:
     Background task that continuously polls NL43 devices and updates status cache.
 
     Features:
-    - Per-device configurable poll intervals (10-3600 seconds)
+    - Per-device configurable poll intervals (30 seconds to 6 hours)
     - Automatic offline detection (marks unreachable after 3 consecutive failures)
     - Dynamic sleep intervals based on device configurations
     - Graceful shutdown on application stop
@@ -230,8 +230,8 @@ class BackgroundPoller:
         Calculate the next sleep interval based on all device poll intervals.
 
         Returns a dynamic sleep time that ensures responsive polling:
-        - Minimum 10 seconds (prevents tight loops)
-        - Maximum 30 seconds (ensures responsiveness)
+        - Minimum 30 seconds (prevents tight loops)
+        - Maximum 300 seconds / 5 minutes (ensures reasonable responsiveness for long intervals)
         - Generally half the minimum device interval
 
         Returns:
@@ -245,14 +245,15 @@ class BackgroundPoller:
             ).all()
 
             if not configs:
-                return 30  # Default sleep when no devices configured
+                return 60  # Default sleep when no devices configured
 
             # Get all intervals
             intervals = [cfg.poll_interval_seconds or 60 for cfg in configs]
             min_interval = min(intervals)
 
-            # Use half the minimum interval, but cap between 10-30 seconds
-            sleep_time = max(10, min(30, min_interval // 2))
+            # Use half the minimum interval, but cap between 30-300 seconds
+            # This allows longer sleep times when polling intervals are long (e.g., hourly)
+            sleep_time = max(30, min(300, min_interval // 2))
 
             return sleep_time
 
