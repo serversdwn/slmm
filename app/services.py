@@ -76,10 +76,22 @@ def persist_snapshot(s: NL43Snapshot, db: Session):
             # Measurement just started - record the start time
             row.measurement_start_time = datetime.utcnow()
             logger.info(f"✓ Measurement started on {s.unit_id} at {row.measurement_start_time}")
+            # Log state change (lazy import to avoid circular dependency)
+            try:
+                from app.device_logger import log_device_event
+                log_device_event(s.unit_id, "INFO", "STATE", f"Measurement STARTED at {row.measurement_start_time}", db)
+            except Exception:
+                pass
         elif was_measuring and not is_measuring:
             # Measurement stopped - clear the start time
             row.measurement_start_time = None
             logger.info(f"✓ Measurement stopped on {s.unit_id}")
+            # Log state change
+            try:
+                from app.device_logger import log_device_event
+                log_device_event(s.unit_id, "INFO", "STATE", "Measurement STOPPED", db)
+            except Exception:
+                pass
 
         row.measurement_state = new_state
         row.counter = s.counter
@@ -99,6 +111,109 @@ def persist_snapshot(s: NL43Snapshot, db: Session):
         db.rollback()
         logger.error(f"Failed to persist snapshot for unit {s.unit_id}: {e}")
         raise
+
+
+async def sync_measurement_start_time_from_ftp(
+    unit_id: str,
+    host: str,
+    tcp_port: int,
+    ftp_port: int,
+    ftp_username: str,
+    ftp_password: str,
+    db: Session
+) -> bool:
+    """
+    Sync measurement start time from the FTP folder timestamp.
+
+    This is called when SLMM detects a device is already measuring but doesn't
+    have a recorded start time (e.g., after service restart or if measurement
+    was started before SLMM began polling).
+
+    The workflow:
+    1. Disable FTP (reset)
+    2. Enable FTP
+    3. List NL-43 folder to get measurement folder timestamps
+    4. Use the most recent folder's timestamp as the start time
+    5. Update the database
+
+    Args:
+        unit_id: Device identifier
+        host: Device IP/hostname
+        tcp_port: TCP control port
+        ftp_port: FTP port (usually 21)
+        ftp_username: FTP username (usually "USER")
+        ftp_password: FTP password (usually "0000")
+        db: Database session
+
+    Returns:
+        True if sync succeeded, False otherwise
+    """
+    logger.info(f"[FTP-SYNC] Attempting to sync measurement start time for {unit_id} via FTP")
+
+    client = NL43Client(
+        host, tcp_port,
+        ftp_username=ftp_username,
+        ftp_password=ftp_password,
+        ftp_port=ftp_port
+    )
+
+    try:
+        # Step 1: Disable FTP to reset it
+        logger.info(f"[FTP-SYNC] Step 1: Disabling FTP on {unit_id}")
+        await client.disable_ftp()
+        await asyncio.sleep(1.5)  # Wait for device to process
+
+        # Step 2: Enable FTP
+        logger.info(f"[FTP-SYNC] Step 2: Enabling FTP on {unit_id}")
+        await client.enable_ftp()
+        await asyncio.sleep(2.0)  # Wait for FTP server to start
+
+        # Step 3: List NL-43 folder
+        logger.info(f"[FTP-SYNC] Step 3: Listing /NL-43 folder on {unit_id}")
+        files = await client.list_ftp_files("/NL-43")
+
+        # Filter for directories only (measurement folders)
+        folders = [f for f in files if f.get('is_dir', False)]
+
+        if not folders:
+            logger.warning(f"[FTP-SYNC] No measurement folders found on {unit_id}")
+            return False
+
+        # Sort by modified timestamp (newest first)
+        folders.sort(key=lambda f: f.get('modified_timestamp', ''), reverse=True)
+
+        latest_folder = folders[0]
+        folder_name = latest_folder['name']
+        logger.info(f"[FTP-SYNC] Found latest measurement folder: {folder_name}")
+
+        # Step 4: Parse timestamp
+        if 'modified_timestamp' in latest_folder and latest_folder['modified_timestamp']:
+            timestamp_str = latest_folder['modified_timestamp']
+            # Parse ISO format timestamp (already in UTC from SLMM FTP listing)
+            start_time = datetime.fromisoformat(timestamp_str.replace('Z', ''))
+
+            # Step 5: Update database
+            status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
+            if status:
+                old_time = status.measurement_start_time
+                status.measurement_start_time = start_time
+                db.commit()
+
+                logger.info(f"[FTP-SYNC] ✓ Successfully synced start time for {unit_id}")
+                logger.info(f"[FTP-SYNC]   Folder: {folder_name}")
+                logger.info(f"[FTP-SYNC]   Old start time: {old_time}")
+                logger.info(f"[FTP-SYNC]   New start time: {start_time}")
+                return True
+            else:
+                logger.warning(f"[FTP-SYNC] Status record not found for {unit_id}")
+                return False
+        else:
+            logger.warning(f"[FTP-SYNC] Could not parse timestamp from folder {folder_name}")
+            return False
+
+    except Exception as e:
+        logger.error(f"[FTP-SYNC] Failed to sync start time for {unit_id}: {e}")
+        return False
 
 
 # Rate limiting: NL43 requires ≥1 second between commands

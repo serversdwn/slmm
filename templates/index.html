@@ -333,6 +333,134 @@
 
         html += `<p style="margin-top: 12px; font-size: 0.9em; color: #666;">Last run: ${new Date(data.timestamp).toLocaleString()}</p>`;
 
+        // Add database dump section if available
+        if (data.database_dump) {
+          html += `<div style="margin-top: 16px; border-top: 1px solid #d0d7de; padding-top: 12px;">`;
+          html += `<h4 style="margin: 0 0 12px 0;">📦 Database Dump</h4>`;
+
+          // Config section
+          if (data.database_dump.config) {
+            const cfg = data.database_dump.config;
+            html += `<div style="background: #f0f4f8; padding: 12px; border-radius: 4px; margin-bottom: 12px;">`;
+            html += `<strong>Configuration (nl43_config)</strong>`;
+            html += `<table style="width: 100%; margin-top: 8px; font-size: 0.9em;">`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Host</td><td>${cfg.host}:${cfg.tcp_port}</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">TCP Enabled</td><td>${cfg.tcp_enabled ? '✓' : '✗'}</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">FTP Enabled</td><td>${cfg.ftp_enabled ? '✓' : '✗'}${cfg.ftp_enabled ? ` (port ${cfg.ftp_port}, user: ${cfg.ftp_username || 'none'})` : ''}</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Background Polling</td><td>${cfg.poll_enabled ? `✓ every ${cfg.poll_interval_seconds}s` : '✗ disabled'}</td></tr>`;
+            html += `</table></div>`;
+          }
+
+          // Status cache section
+          if (data.database_dump.status_cache) {
+            const cache = data.database_dump.status_cache;
+            html += `<div style="background: #f0f8f4; padding: 12px; border-radius: 4px; margin-bottom: 12px;">`;
+            html += `<strong>Status Cache (nl43_status)</strong>`;
+            html += `<table style="width: 100%; margin-top: 8px; font-size: 0.9em;">`;
+
+            // Measurement state and timing
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Measurement State</td><td><strong>${cache.measurement_state || 'unknown'}</strong></td></tr>`;
+            if (cache.measurement_start_time) {
+              const startTime = new Date(cache.measurement_start_time);
+              const elapsed = Math.floor((Date.now() - startTime) / 1000);
+              const elapsedStr = elapsed > 3600 ? `${Math.floor(elapsed/3600)}h ${Math.floor((elapsed%3600)/60)}m` : elapsed > 60 ? `${Math.floor(elapsed/60)}m ${elapsed%60}s` : `${elapsed}s`;
+              html += `<tr><td style="padding: 2px 8px; color: #666;">Measurement Started</td><td>${startTime.toLocaleString()} (${elapsedStr} ago)</td></tr>`;
+            }
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Counter (d0)</td><td>${cache.counter || 'N/A'}</td></tr>`;
+
+            // Sound levels
+            html += `<tr><td colspan="2" style="padding: 8px 8px 2px 8px; font-weight: 600; border-top: 1px solid #d0d7de;">Sound Levels (dB)</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Lp (Instantaneous)</td><td>${cache.lp || 'N/A'}</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Leq (Equivalent)</td><td>${cache.leq || 'N/A'}</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Lmax / Lmin</td><td>${cache.lmax || 'N/A'} / ${cache.lmin || 'N/A'}</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Lpeak</td><td>${cache.lpeak || 'N/A'}</td></tr>`;
+
+            // Device status
+            html += `<tr><td colspan="2" style="padding: 8px 8px 2px 8px; font-weight: 600; border-top: 1px solid #d0d7de;">Device Status</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Battery</td><td>${cache.battery_level || 'N/A'}${cache.power_source ? ` (${cache.power_source})` : ''}</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">SD Card</td><td>${cache.sd_remaining_mb ? `${cache.sd_remaining_mb} MB` : 'N/A'}${cache.sd_free_ratio ? ` (${cache.sd_free_ratio} free)` : ''}</td></tr>`;
+
+            // Polling status
+            html += `<tr><td colspan="2" style="padding: 8px 8px 2px 8px; font-weight: 600; border-top: 1px solid #d0d7de;">Polling Status</td></tr>`;
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Reachable</td><td>${cache.is_reachable ? '🟢 Yes' : '🔴 No'}</td></tr>`;
+            if (cache.last_seen) {
+              html += `<tr><td style="padding: 2px 8px; color: #666;">Last Seen</td><td>${new Date(cache.last_seen).toLocaleString()}</td></tr>`;
+            }
+            if (cache.last_success) {
+              html += `<tr><td style="padding: 2px 8px; color: #666;">Last Success</td><td>${new Date(cache.last_success).toLocaleString()}</td></tr>`;
+            }
+            if (cache.last_poll_attempt) {
+              html += `<tr><td style="padding: 2px 8px; color: #666;">Last Poll Attempt</td><td>${new Date(cache.last_poll_attempt).toLocaleString()}</td></tr>`;
+            }
+            html += `<tr><td style="padding: 2px 8px; color: #666;">Consecutive Failures</td><td>${cache.consecutive_failures || 0}</td></tr>`;
+            if (cache.last_error) {
+              html += `<tr><td style="padding: 2px 8px; color: #666;">Last Error</td><td style="color: #d00; font-size: 0.85em;">${cache.last_error}</td></tr>`;
+            }
+
+            html += `</table></div>`;
+
+            // Raw payload (collapsible)
+            if (cache.raw_payload) {
+              html += `<details style="margin-top: 8px;"><summary style="cursor: pointer; color: #666; font-size: 0.9em;">📄 Raw Payload</summary>`;
+              html += `<pre style="background: #f6f8fa; padding: 8px; border-radius: 4px; font-size: 0.8em; overflow-x: auto; margin-top: 8px;">${cache.raw_payload}</pre></details>`;
+            }
+          } else {
+            html += `<p style="color: #888; font-style: italic;">No cached status available for this unit.</p>`;
+          }
+
+          html += `</div>`;
+        }
+
+        // Fetch and display device logs
+        try {
+          const logsRes = await fetch(`/api/nl43/${unitId}/logs?limit=50`);
+          if (logsRes.ok) {
+            const logsData = await logsRes.json();
+            if (logsData.logs && logsData.logs.length > 0) {
+              html += `<div style="margin-top: 16px; border-top: 1px solid #d0d7de; padding-top: 12px;">`;
+              html += `<h4 style="margin: 0 0 12px 0;">📋 Device Logs (${logsData.stats.total} total)</h4>`;
+
+              // Stats summary
+              if (logsData.stats.by_level) {
+                html += `<div style="margin-bottom: 8px; font-size: 0.85em; color: #666;">`;
+                const levels = logsData.stats.by_level;
+                const parts = [];
+                if (levels.ERROR) parts.push(`<span style="color: #d00;">${levels.ERROR} errors</span>`);
+                if (levels.WARNING) parts.push(`<span style="color: #fa0;">${levels.WARNING} warnings</span>`);
+                if (levels.INFO) parts.push(`${levels.INFO} info`);
+                html += parts.join(' · ');
+                html += `</div>`;
+              }
+
+              // Log entries (collapsible)
+              html += `<details open><summary style="cursor: pointer; font-size: 0.9em; margin-bottom: 8px;">Recent entries (${logsData.logs.length})</summary>`;
+              html += `<div style="max-height: 300px; overflow-y: auto; background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 4px; padding: 8px; font-size: 0.8em; font-family: monospace;">`;
+
+              logsData.logs.forEach(entry => {
+                const levelColor = {
+                  'ERROR': '#d00',
+                  'WARNING': '#b86e00',
+                  'INFO': '#0969da',
+                  'DEBUG': '#888'
+                }[entry.level] || '#666';
+
+                const time = new Date(entry.timestamp).toLocaleString();
+                html += `<div style="margin-bottom: 4px; border-bottom: 1px solid #eee; padding-bottom: 4px;">`;
+                html += `<span style="color: #888;">${time}</span> `;
+                html += `<span style="color: ${levelColor}; font-weight: 600;">[${entry.level}]</span> `;
+                html += `<span style="color: #666;">[${entry.category}]</span> `;
+                html += `${entry.message}`;
+                html += `</div>`;
+              });
+
+              html += `</div></details>`;
+              html += `</div>`;
+            }
+          }
+        } catch (logErr) {
+          console.log('Could not fetch device logs:', logErr);
+        }
+
         resultsEl.innerHTML = html;
         log(`Diagnostics complete: ${data.overall_status}`);
 

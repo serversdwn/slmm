@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 from pydantic import BaseModel, field_validator, Field
+from typing import Optional
 import logging
 import ipaddress
 import json
@@ -1842,7 +1843,132 @@ async def run_diagnostics(unit_id: str, db: Session = Depends(get_db)):
 
     # All tests passed
     diagnostics["overall_status"] = "pass"
+
+    # Add database dump: config and status cache
+    diagnostics["database_dump"] = {
+        "config": {
+            "unit_id": cfg.unit_id,
+            "host": cfg.host,
+            "tcp_port": cfg.tcp_port,
+            "tcp_enabled": cfg.tcp_enabled,
+            "ftp_enabled": cfg.ftp_enabled,
+            "ftp_port": cfg.ftp_port,
+            "ftp_username": cfg.ftp_username,
+            "ftp_password": "***" if cfg.ftp_password else None,  # Mask password
+            "web_enabled": cfg.web_enabled,
+            "poll_interval_seconds": cfg.poll_interval_seconds,
+            "poll_enabled": cfg.poll_enabled
+        },
+        "status_cache": None
+    }
+
+    # Get cached status if available
+    status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
+    if status:
+        # Helper to format datetime as ISO with Z suffix to indicate UTC
+        def to_utc_iso(dt):
+            return dt.isoformat() + 'Z' if dt else None
+
+        diagnostics["database_dump"]["status_cache"] = {
+            "unit_id": status.unit_id,
+            "last_seen": to_utc_iso(status.last_seen),
+            "measurement_state": status.measurement_state,
+            "measurement_start_time": to_utc_iso(status.measurement_start_time),
+            "counter": status.counter,
+            "lp": status.lp,
+            "leq": status.leq,
+            "lmax": status.lmax,
+            "lmin": status.lmin,
+            "lpeak": status.lpeak,
+            "battery_level": status.battery_level,
+            "power_source": status.power_source,
+            "sd_remaining_mb": status.sd_remaining_mb,
+            "sd_free_ratio": status.sd_free_ratio,
+            "is_reachable": status.is_reachable,
+            "consecutive_failures": status.consecutive_failures,
+            "last_poll_attempt": to_utc_iso(status.last_poll_attempt),
+            "last_success": to_utc_iso(status.last_success),
+            "last_error": status.last_error,
+            "raw_payload": status.raw_payload
+        }
+
     return diagnostics
+
+
+# ============================================================================
+# DEVICE LOGS ENDPOINTS
+# ============================================================================
+
+@router.get("/{unit_id}/logs")
+def get_device_logs(
+    unit_id: str,
+    limit: int = 100,
+    offset: int = 0,
+    level: Optional[str] = None,
+    category: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get log entries for a specific device.
+
+    Query parameters:
+    - limit: Max entries to return (default: 100, max: 1000)
+    - offset: Number of entries to skip (for pagination)
+    - level: Filter by level (DEBUG, INFO, WARNING, ERROR)
+    - category: Filter by category (TCP, FTP, POLL, COMMAND, STATE, SYNC)
+
+    Returns newest entries first.
+    """
+    from app.device_logger import get_device_logs as fetch_logs, get_log_stats
+
+    # Validate limit
+    limit = min(limit, 1000)
+
+    logs = fetch_logs(
+        unit_id=unit_id,
+        limit=limit,
+        offset=offset,
+        level=level,
+        category=category,
+        db=db
+    )
+
+    stats = get_log_stats(unit_id, db)
+
+    return {
+        "status": "ok",
+        "unit_id": unit_id,
+        "logs": logs,
+        "count": len(logs),
+        "stats": stats,
+        "filters": {
+            "level": level,
+            "category": category
+        },
+        "pagination": {
+            "limit": limit,
+            "offset": offset
+        }
+    }
+
+
+@router.delete("/{unit_id}/logs")
+def clear_device_logs(unit_id: str, db: Session = Depends(get_db)):
+    """
+    Clear all log entries for a specific device.
+    """
+    from app.models import DeviceLog
+
+    deleted = db.query(DeviceLog).filter(DeviceLog.unit_id == unit_id).delete()
+    db.commit()
+
+    logger.info(f"Cleared {deleted} log entries for device {unit_id}")
+
+    return {
+        "status": "ok",
+        "message": f"Cleared {deleted} log entries for {unit_id}",
+        "deleted_count": deleted
+    }
 
 
 # ============================================================================

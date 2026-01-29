@@ -53,3 +53,22 @@ class NL43Status(Base):
     last_poll_attempt = Column(DateTime, nullable=True)  # Last time background poller attempted to poll
     last_success = Column(DateTime, nullable=True)  # Last successful poll timestamp
     last_error = Column(Text, nullable=True)  # Last error message (truncated to 500 chars)
+
+    # FTP start time sync tracking
+    start_time_sync_attempted = Column(Boolean, default=False)  # True if FTP sync was attempted for current measurement
+
+
+class DeviceLog(Base):
+    """
+    Per-device log entries for debugging and audit trail.
+    Stores events like commands, state changes, errors, and FTP operations.
+    """
+
+    __tablename__ = "device_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    unit_id = Column(String, index=True, nullable=False)
+    timestamp = Column(DateTime, default=func.now(), index=True)
+    level = Column(String, default="INFO")  # DEBUG, INFO, WARNING, ERROR
+    category = Column(String, default="GENERAL")  # TCP, FTP, POLL, COMMAND, STATE, SYNC
+    message = Column(Text, nullable=False)

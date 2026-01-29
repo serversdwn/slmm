@@ -15,7 +15,8 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import NL43Config, NL43Status
-from app.services import NL43Client, persist_snapshot
+from app.services import NL43Client, persist_snapshot, sync_measurement_start_time_from_ftp
+from app.device_logger import log_device_event, cleanup_old_logs
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ class BackgroundPoller:
         self._task: Optional[asyncio.Task] = None
         self._running = False
         self._logger = logger
+        self._last_cleanup = None  # Track last log cleanup time
 
     async def start(self):
         """Start the background polling task."""
@@ -77,6 +79,15 @@ class BackgroundPoller:
                 await self._poll_all_devices()
             except Exception as e:
                 self._logger.error(f"Error in poll loop: {e}", exc_info=True)
+
+            # Run log cleanup once per hour
+            try:
+                now = datetime.utcnow()
+                if self._last_cleanup is None or (now - self._last_cleanup).total_seconds() > 3600:
+                    cleanup_old_logs()
+                    self._last_cleanup = now
+            except Exception as e:
+                self._logger.warning(f"Log cleanup failed: {e}")
 
             # Calculate dynamic sleep interval
             sleep_time = self._calculate_sleep_interval()
@@ -205,6 +216,71 @@ class BackgroundPoller:
             db.commit()
             self._logger.info(f"✓ Successfully polled {unit_id}")
 
+            # Log to device log
+            log_device_event(
+                unit_id, "INFO", "POLL",
+                f"Poll success: state={snap.measurement_state}, Leq={snap.leq}, Lp={snap.lp}",
+                db
+            )
+
+            # Check if device is measuring but has no start time recorded
+            # This happens if measurement was started before SLMM began polling
+            # or after a service restart
+            status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
+
+            # Reset the sync flag when measurement stops (so next measurement can sync)
+            if status and status.measurement_state != "Start":
+                if status.start_time_sync_attempted:
+                    status.start_time_sync_attempted = False
+                    db.commit()
+                    self._logger.debug(f"Reset FTP sync flag for {unit_id} (measurement stopped)")
+                    log_device_event(unit_id, "DEBUG", "STATE", "Measurement stopped, reset FTP sync flag", db)
+
+            # Attempt FTP sync if:
+            # - Device is measuring
+            # - No start time recorded
+            # - FTP sync not already attempted for this measurement
+            # - FTP is configured
+            if (status and
+                status.measurement_state == "Start" and
+                status.measurement_start_time is None and
+                not status.start_time_sync_attempted and
+                cfg.ftp_enabled and
+                cfg.ftp_username and
+                cfg.ftp_password):
+
+                self._logger.info(
+                    f"Device {unit_id} is measuring but has no start time - "
+                    f"attempting FTP sync"
+                )
+                log_device_event(unit_id, "INFO", "SYNC", "Attempting FTP sync for measurement start time", db)
+
+                # Mark that we attempted sync (prevents repeated attempts on failure)
+                status.start_time_sync_attempted = True
+                db.commit()
+
+                try:
+                    synced = await sync_measurement_start_time_from_ftp(
+                        unit_id=unit_id,
+                        host=cfg.host,
+                        tcp_port=cfg.tcp_port,
+                        ftp_port=cfg.ftp_port or 21,
+                        ftp_username=cfg.ftp_username,
+                        ftp_password=cfg.ftp_password,
+                        db=db
+                    )
+                    if synced:
+                        self._logger.info(f"✓ FTP sync succeeded for {unit_id}")
+                        log_device_event(unit_id, "INFO", "SYNC", "FTP sync succeeded - measurement start time updated", db)
+                    else:
+                        self._logger.warning(f"FTP sync returned False for {unit_id}")
+                        log_device_event(unit_id, "WARNING", "SYNC", "FTP sync returned False", db)
+                except Exception as sync_err:
+                    self._logger.warning(
+                        f"FTP sync failed for {unit_id}: {sync_err}"
+                    )
+                    log_device_event(unit_id, "ERROR", "SYNC", f"FTP sync failed: {sync_err}", db)
+
         except Exception as e:
             # Failure - increment counter and potentially mark offline
             status.consecutive_failures += 1
@@ -217,11 +293,13 @@ class BackgroundPoller:
                     self._logger.warning(
                         f"Device {unit_id} marked unreachable after {status.consecutive_failures} failures: {error_msg}"
                     )
+                    log_device_event(unit_id, "ERROR", "POLL", f"Device marked UNREACHABLE after {status.consecutive_failures} failures: {error_msg}", db)
                 status.is_reachable = False
             else:
                 self._logger.warning(
                     f"Poll failed for {unit_id} (attempt {status.consecutive_failures}/3): {error_msg}"
                 )
+                log_device_event(unit_id, "WARNING", "POLL", f"Poll failed (attempt {status.consecutive_failures}/3): {error_msg}", db)
 
             db.commit()
 
