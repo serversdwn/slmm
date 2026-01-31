@@ -657,8 +657,9 @@ async def stop_cycle(unit_id: str, payload: StopCyclePayload = None, db: Session
         return {"status": "ok", "unit_id": unit_id, **result}
 
     except Exception as e:
-        logger.error(f"Stop cycle failed for {unit_id}: {e}")
-        raise HTTPException(status_code=502, detail=str(e))
+        error_msg = str(e) if str(e) else f"{type(e).__name__}: No details available"
+        logger.error(f"Stop cycle failed for {unit_id}: {error_msg}")
+        raise HTTPException(status_code=502, detail=error_msg)
 
 
 @router.post("/{unit_id}/store")

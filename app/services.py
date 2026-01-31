@@ -1381,8 +1381,13 @@ class NL43Client:
         result["stopped"] = True
         logger.info(f"[STOP-CYCLE] Measurement stopped")
 
-        # Step 2: Enable FTP
-        logger.info(f"[STOP-CYCLE] Step 2: Enabling FTP")
+        # Step 2: Reset FTP (disable then enable) to clear any stale state
+        logger.info(f"[STOP-CYCLE] Step 2: Resetting FTP (disable then enable)")
+        try:
+            await self.disable_ftp()
+            logger.info(f"[STOP-CYCLE] FTP disabled")
+        except Exception as e:
+            logger.warning(f"[STOP-CYCLE] FTP disable failed (may already be off): {e}")
         await self.enable_ftp()
         result["ftp_enabled"] = True
         logger.info(f"[STOP-CYCLE] FTP enabled")
