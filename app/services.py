@@ -1389,8 +1389,34 @@ class NL43Client:
         except Exception as e:
             logger.warning(f"[STOP-CYCLE] FTP disable failed (may already be off): {e}")
         await self.enable_ftp()
-        result["ftp_enabled"] = True
-        logger.info(f"[STOP-CYCLE] FTP enabled")
+        logger.info(f"[STOP-CYCLE] FTP enable command sent")
+
+        # Step 2b: Wait and verify FTP is ready (NL-43 needs time to start FTP server)
+        ftp_ready_timeout = 30  # seconds
+        ftp_check_interval = 2  # seconds
+        ftp_ready = False
+        elapsed = 0
+
+        logger.info(f"[STOP-CYCLE] Step 2b: Waiting up to {ftp_ready_timeout}s for FTP server to be ready")
+        while elapsed < ftp_ready_timeout:
+            await asyncio.sleep(ftp_check_interval)
+            elapsed += ftp_check_interval
+            try:
+                ftp_status = await self.get_ftp_status()
+                logger.info(f"[STOP-CYCLE] FTP status check at {elapsed}s: {ftp_status}")
+                if ftp_status.lower() == "on":
+                    ftp_ready = True
+                    logger.info(f"[STOP-CYCLE] FTP server confirmed ready after {elapsed}s")
+                    break
+            except Exception as e:
+                logger.warning(f"[STOP-CYCLE] FTP status check failed at {elapsed}s: {e}")
+
+        if ftp_ready:
+            result["ftp_enabled"] = True
+            logger.info(f"[STOP-CYCLE] FTP enabled and verified")
+        else:
+            logger.warning(f"[STOP-CYCLE] FTP not confirmed ready after {ftp_ready_timeout}s, proceeding anyway")
+            result["ftp_enabled"] = True  # Command was sent, just not verified
 
         if not download:
             logger.info(f"[STOP-CYCLE] === Cycle complete (download=False) ===")
