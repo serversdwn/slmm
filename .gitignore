@@ -1,6 +1,7 @@
 /manuals/
 /data/
 /SLM-stress-test/stress_test_logs/
+/SLM-stress-test/tcpdump-runs/
 
 # Python cache
 __pycache__/
@@ -13,3 +14,5 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+*.pcap
