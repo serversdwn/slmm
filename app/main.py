@@ -29,7 +29,11 @@ logger.info("Database tables initialized")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Manage application lifecycle - startup and shutdown events."""
+    from app.services import _connection_pool
+
     # Startup
+    logger.info("Starting TCP connection pool cleanup task...")
+    _connection_pool.start_cleanup()
     logger.info("Starting background poller...")
     await poller.start()
     logger.info("Background poller started")
@@ -40,6 +44,9 @@ async def lifespan(app: FastAPI):
     logger.info("Stopping background poller...")
     await poller.stop()
     logger.info("Background poller stopped")
+    logger.info("Closing TCP connection pool...")
+    await _connection_pool.close_all()
+    logger.info("TCP connection pool closed")
 
 
 app = FastAPI(

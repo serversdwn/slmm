@@ -94,6 +94,34 @@ class PollingConfigPayload(BaseModel):
 
 
 # ============================================================================
+# TCP CONNECTION POOL ENDPOINTS (must be before /{unit_id} routes)
+# ============================================================================
+
+@router.get("/_connections/status")
+async def get_connection_pool_status():
+    """Get status of the persistent TCP connection pool.
+
+    Returns information about cached connections, keepalive settings,
+    and per-device connection age/idle times.
+    """
+    from app.services import _connection_pool
+    return {"status": "ok", "pool": _connection_pool.get_stats()}
+
+
+@router.post("/_connections/flush")
+async def flush_connection_pool():
+    """Close all cached TCP connections.
+
+    Useful for debugging or forcing fresh connections to all devices.
+    """
+    from app.services import _connection_pool
+    await _connection_pool.close_all()
+    # Restart cleanup task since close_all cancels it
+    _connection_pool.start_cleanup()
+    return {"status": "ok", "message": "All cached connections closed"}
+
+
+# ============================================================================
 # GLOBAL POLLING STATUS ENDPOINT (must be before /{unit_id} routes)
 # ============================================================================
 
