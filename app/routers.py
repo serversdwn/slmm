@@ -545,12 +545,6 @@ async def stop_measurement(unit_id: str, db: Session = Depends(get_db)):
     try:
         await client.stop()
         logger.info(f"Stopped measurement on unit {unit_id}")
-
-        # Query device status to update database with "Stop" state
-        snap = await client.request_dod()
-        snap.unit_id = unit_id
-        persist_snapshot(snap, db)
-
     except ConnectionError as e:
         logger.error(f"Failed to stop measurement on {unit_id}: {e}")
         raise HTTPException(status_code=502, detail="Failed to communicate with device")
@@ -560,6 +554,15 @@ async def stop_measurement(unit_id: str, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Unexpected error stopping measurement on {unit_id}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+    # Query device status to update database — non-fatal if this fails
+    try:
+        snap = await client.request_dod()
+        snap.unit_id = unit_id
+        persist_snapshot(snap, db)
+    except Exception as e:
+        logger.warning(f"Stop succeeded but failed to update status for {unit_id}: {e}")
+
     return {"status": "ok", "message": "Measurement stopped"}
 
 

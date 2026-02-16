@@ -245,7 +245,12 @@ class NL43Client:
         self.device_key = f"{host}:{port}"
 
     async def _enforce_rate_limit(self):
-        """Ensure ≥1 second between commands to the same device."""
+        """Ensure ≥1 second between commands to the same device.
+
+        NL43 protocol requires ≥1s after the device responds before sending
+        the next command. The timestamp is recorded after each command completes
+        (connection closed), so we measure from completion, not from send time.
+        """
         async with _rate_limit_lock:
             last_time = _last_command_time.get(self.device_key, 0)
             elapsed = time.time() - last_time
@@ -253,7 +258,6 @@ class NL43Client:
                 wait_time = 1.0 - elapsed
                 logger.debug(f"Rate limiting: waiting {wait_time:.2f}s for {self.device_key}")
                 await asyncio.sleep(wait_time)
-            _last_command_time[self.device_key] = time.time()
 
     async def _send_command(self, cmd: str) -> str:
         """Send ASCII command to NL43 device via TCP.
@@ -334,6 +338,9 @@ class NL43Client:
             writer.close()
             with contextlib.suppress(Exception):
                 await writer.wait_closed()
+            # Record completion time for rate limiting — NL43 requires ≥1s
+            # after response before next command, so measure from connection close
+            _last_command_time[self.device_key] = time.time()
 
     async def request_dod(self) -> NL43Snapshot:
         """Request DOD (Data Output Display) snapshot from device.
