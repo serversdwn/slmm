@@ -1,6 +1,6 @@
 # SLMM - Sound Level Meter Manager
 
-**Version 0.2.1**
+**Version 0.3.0**
 
 Backend API service for controlling and monitoring Rion NL-43/NL-53 Sound Level Meters via TCP and FTP protocols.
 
@@ -12,8 +12,9 @@ SLMM is a standalone backend module that provides REST API routing and command t
 
 ## Features
 
-- **Background Polling** ⭐ NEW: Continuous automatic polling of devices with configurable intervals
-- **Offline Detection** ⭐ NEW: Automatic device reachability tracking with failure counters
+- **Persistent TCP Connections**: Cached per-device connections with OS-level keepalive, tuned for cellular modem reliability
+- **Background Polling**: Continuous automatic polling of devices with configurable intervals
+- **Offline Detection**: Automatic device reachability tracking with failure counters
 - **Device Management**: Configure and manage multiple NL43/NL53 devices
 - **Real-time Monitoring**: Stream live measurement data via WebSocket
 - **Measurement Control**: Start, stop, pause, resume, and reset measurements
@@ -22,6 +23,7 @@ SLMM is a standalone backend module that provides REST API routing and command t
 - **Device Configuration**: Manage frequency/time weighting, clock sync, and more
 - **Rate Limiting**: Automatic 1-second delay enforcement between device commands
 - **Persistent Storage**: SQLite database for device configs and measurement cache
+- **Connection Diagnostics**: Live UI and API endpoints for monitoring TCP connection pool status
 
 ## Architecture
 
@@ -29,29 +31,39 @@ SLMM is a standalone backend module that provides REST API routing and command t
 ┌─────────────────┐         ┌──────────────────────────────┐         ┌─────────────────┐
 │                 │◄───────►│  SLMM API                    │◄───────►│  NL43/NL53      │
 │  (Frontend)     │  HTTP   │  • REST Endpoints            │  TCP    │  Sound Meters   │
-└─────────────────┘         │  • WebSocket Streaming       │         └─────────────────┘
-                            │  • Background Poller ⭐ NEW  │                ▲
-                            └──────────────────────────────┘                │
-                                          │                         Continuous
-                                          ▼                          Polling
-                                  ┌──────────────┐                      │
-                                  │  SQLite DB   │◄─────────────────────┘
+└─────────────────┘         │  • WebSocket Streaming       │  (kept  │  (via cellular  │
+                            │  • Background Poller         │  alive) │   modem)        │
+                            │  • Connection Pool (v0.3)    │         └─────────────────┘
+                            └──────────────────────────────┘
+                                          │
+                                          ▼
+                                  ┌──────────────┐
+                                  │  SQLite DB   │
                                   │  • Config    │
                                   │  • Status    │
                                   └──────────────┘
 ```
 
+### Persistent TCP Connection Pool (v0.3.0)
+
+SLMM maintains persistent TCP connections to devices with OS-level keepalive, designed for reliable operation over cellular modems:
+
+- **Connection Reuse**: One cached TCP socket per device, reused across all commands (no repeated handshakes)
+- **TCP Keepalive**: Probes keep cellular NAT tables alive and detect dead connections early
+- **Transparent Retry**: Stale cached connections automatically retry with a fresh socket
+- **Configurable**: Idle TTL (300s), max age (1800s), and keepalive timing via environment variables
+- **Diagnostics**: Live UI on the roster page and API endpoints for monitoring pool status
+
 ### Background Polling (v0.2.0)
 
-SLMM now includes a background polling service that continuously queries devices and updates the status cache:
+Background polling service continuously queries devices and updates the status cache:
 
 - **Automatic Updates**: Devices are polled at configurable intervals (10-3600 seconds)
 - **Offline Detection**: Devices marked unreachable after 3 consecutive failures
 - **Per-Device Configuration**: Each device can have a custom polling interval
 - **Resource Efficient**: Dynamic sleep intervals and smart scheduling
-- **Graceful Shutdown**: Background task stops cleanly on service shutdown
 
-This makes Terra-View significantly more responsive - status requests return cached data instantly (<100ms) instead of waiting for device queries (1-2 seconds).
+Status requests return cached data instantly (<100ms) instead of waiting for device queries (1-2 seconds).
 
 ## Quick Start
 
@@ -96,8 +108,17 @@ Once running, visit:
 
 ### Environment Variables
 
+**Server:**
 - `PORT`: Server port (default: 8100)
 - `CORS_ORIGINS`: Comma-separated list of allowed origins (default: "*")
+
+**TCP Connection Pool:**
+- `TCP_PERSISTENT_ENABLED`: Enable persistent connections (default: "true")
+- `TCP_IDLE_TTL`: Close idle connections after N seconds (default: 300)
+- `TCP_MAX_AGE`: Force reconnect after N seconds (default: 1800)
+- `TCP_KEEPALIVE_IDLE`: Seconds idle before keepalive probes (default: 15)
+- `TCP_KEEPALIVE_INTERVAL`: Seconds between keepalive probes (default: 10)
+- `TCP_KEEPALIVE_COUNT`: Failed probes before declaring dead (default: 3)
 
 ### Database
 
@@ -126,13 +147,20 @@ Logs are written to:
 | GET | `/api/nl43/{unit_id}/live` | Request fresh DOD data from device (bypasses cache) |
 | WS | `/api/nl43/{unit_id}/stream` | WebSocket stream for real-time DRD data |
 
-### Background Polling Configuration ⭐ NEW
+### Background Polling
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/nl43/{unit_id}/polling/config` | Get device polling configuration |
 | PUT | `/api/nl43/{unit_id}/polling/config` | Update polling interval and enable/disable polling |
 | GET | `/api/nl43/_polling/status` | Get global polling status for all devices |
+
+### Connection Pool
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/nl43/_connections/status` | Get pool config, active connections, age/idle times |
+| POST | `/api/nl43/_connections/flush` | Force-close all cached TCP connections |
 
 ### Measurement Control
 
@@ -255,6 +283,9 @@ Caches latest measurement snapshot:
 
 ### TCP Communication
 - Uses ASCII command protocol over TCP
+- Persistent connections with OS-level keepalive (tuned for cellular modems)
+- Connections cached per device and reused across commands
+- Transparent retry on stale connections
 - Enforces ≥1 second delay between commands to same device
 - Two-line response format:
   - Line 1: Result code (R+0000 for success)
@@ -318,6 +349,16 @@ curl http://localhost:8100/api/nl43/meter-001/polling/config
 
 # Check global polling status
 curl http://localhost:8100/api/nl43/_polling/status
+```
+
+### Check Connection Pool Status
+```bash
+curl http://localhost:8100/api/nl43/_connections/status | jq '.'
+```
+
+### Flush All Cached Connections
+```bash
+curl -X POST http://localhost:8100/api/nl43/_connections/flush
 ```
 
 ### Verify Device Settings
@@ -388,10 +429,18 @@ See [API.md](API.md) for detailed integration examples.
 ## Troubleshooting
 
 ### Connection Issues
+- Check connection pool status: `curl http://localhost:8100/api/nl43/_connections/status`
+- Flush stale connections: `curl -X POST http://localhost:8100/api/nl43/_connections/flush`
 - Verify device IP address and port in configuration
 - Ensure device is on the same network
 - Check firewall rules allow TCP/FTP connections
 - Verify RX55 network adapter is properly configured on device
+
+### Cellular Modem Issues
+- If modem wedges from too many handshakes, ensure `TCP_PERSISTENT_ENABLED=true` (default)
+- Increase `TCP_IDLE_TTL` if connections expire between poll cycles
+- Keepalive probes (default: every 15s) keep NAT tables alive — adjust `TCP_KEEPALIVE_IDLE` if needed
+- Set `TCP_PERSISTENT_ENABLED=false` to disable pooling for debugging
 
 ### Rate Limiting
 - API automatically enforces 1-second delay between commands
