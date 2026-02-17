@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="SLMM NL43 Addon",
     description="Standalone module for NL43 configuration and status APIs with background polling",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
