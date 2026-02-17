@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SLMM Roster - Sound Level Meter Configuration</title>
+  <title>SLMM - Device Roster &amp; Connections</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -227,41 +227,165 @@
     }
     .toast-success { background: #2da44e; }
     .toast-error { background: #cf222e; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 0;
+      border-bottom: 2px solid #d0d7de;
+    }
+    .tab-btn {
+      padding: 10px 20px;
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      color: #57606a;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .tab-btn:hover { color: #24292f; }
+    .tab-btn.active {
+      color: #24292f;
+      border-bottom-color: #fd8c73;
+    }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Connection pool panel */
+    .pool-config {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .pool-config-card {
+      background: #f6f8fa;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 12px;
+    }
+    .pool-config-card .label {
+      font-size: 11px;
+      color: #57606a;
+      text-transform: uppercase;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .pool-config-card .value {
+      font-size: 18px;
+      font-weight: 600;
+      color: #24292f;
+    }
+    .conn-card {
+      background: white;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .conn-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .conn-card-header strong { font-size: 15px; }
+    .conn-card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 8px;
+    }
+    .conn-stat .label {
+      font-size: 11px;
+      color: #57606a;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    .conn-stat .value {
+      font-size: 14px;
+      font-weight: 600;
+      color: #24292f;
+    }
+    .conn-empty {
+      text-align: center;
+      padding: 32px;
+      color: #57606a;
+    }
+    .pool-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>📊 Sound Level Meter Roster</h1>
+      <h1>SLMM - Roster &amp; Connections</h1>
       <div class="nav">
-        <a href="/" class="btn">← Back to Control Panel</a>
+        <a href="/" class="btn">&larr; Back to Control Panel</a>
         <button class="btn btn-primary" onclick="openAddModal()">+ Add Device</button>
       </div>
     </div>
 
-    <div class="table-container">
-      <table id="rosterTable">
-        <thead>
-          <tr>
-            <th>Unit ID</th>
-            <th>Host / IP</th>
-            <th>TCP Port</th>
-            <th>FTP Port</th>
-            <th class="checkbox-cell">TCP</th>
-            <th class="checkbox-cell">FTP</th>
-            <th class="checkbox-cell">Polling</th>
-            <th>Status</th>
-            <th class="actions-cell">Actions</th>
-          </tr>
-        </thead>
-        <tbody id="rosterBody">
-          <tr>
-            <td colspan="9" style="text-align: center; padding: 24px;">
-              Loading...
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('roster')">Device Roster</button>
+      <button class="tab-btn" onclick="switchTab('connections')">Connections</button>
+    </div>
+
+    <!-- Roster Tab -->
+    <div id="tab-roster" class="tab-panel active">
+      <div class="table-container" style="border-top-left-radius: 0; border-top-right-radius: 0;">
+        <table id="rosterTable">
+          <thead>
+            <tr>
+              <th>Unit ID</th>
+              <th>Host / IP</th>
+              <th>TCP Port</th>
+              <th>FTP Port</th>
+              <th class="checkbox-cell">TCP</th>
+              <th class="checkbox-cell">FTP</th>
+              <th class="checkbox-cell">Polling</th>
+              <th>Status</th>
+              <th class="actions-cell">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="rosterBody">
+            <tr>
+              <td colspan="9" style="text-align: center; padding: 24px;">
+                Loading...
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Connections Tab -->
+    <div id="tab-connections" class="tab-panel">
+      <div class="table-container" style="padding: 20px; border-top-left-radius: 0; border-top-right-radius: 0;">
+        <div class="pool-actions">
+          <button class="btn" onclick="loadConnections()">Refresh</button>
+          <button class="btn btn-danger" onclick="flushConnections()">Flush All Connections</button>
+        </div>
+
+        <h3 style="margin: 0 0 12px 0; font-size: 16px;">Pool Configuration</h3>
+        <div id="poolConfig" class="pool-config">
+          <div class="pool-config-card">
+            <div class="label">Status</div>
+            <div class="value" id="poolEnabled">--</div>
+          </div>
+        </div>
+
+        <h3 style="margin: 20px 0 12px 0; font-size: 16px;">Active Connections</h3>
+        <div id="connectionsList">
+          <div class="conn-empty">Loading...</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -619,6 +743,159 @@
         closeModal();
       }
     });
+
+    // ========== Tab Switching ==========
+
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+
+      document.querySelector(`.tab-btn[onclick="switchTab('${tabName}')"]`).classList.add('active');
+      document.getElementById(`tab-${tabName}`).classList.add('active');
+
+      if (tabName === 'connections') {
+        loadConnections();
+      }
+    }
+
+    // ========== Connection Pool ==========
+
+    let connectionsRefreshTimer = null;
+
+    async function loadConnections() {
+      try {
+        const res = await fetch('/api/nl43/_connections/status');
+        const data = await res.json();
+
+        if (!res.ok) {
+          showToast('Failed to load connection pool status', 'error');
+          return;
+        }
+
+        const pool = data.pool;
+        renderPoolConfig(pool);
+        renderConnections(pool.connections);
+
+        // Auto-refresh while tab is active
+        clearTimeout(connectionsRefreshTimer);
+        if (document.getElementById('tab-connections').classList.contains('active')) {
+          connectionsRefreshTimer = setTimeout(loadConnections, 5000);
+        }
+      } catch (err) {
+        showToast('Error loading connections: ' + err.message, 'error');
+        console.error('Load connections error:', err);
+      }
+    }
+
+    function renderPoolConfig(pool) {
+      document.getElementById('poolConfig').innerHTML = `
+        <div class="pool-config-card">
+          <div class="label">Persistent</div>
+          <div class="value" style="color: ${pool.enabled ? '#1a7f37' : '#cf222e'}">${pool.enabled ? 'Enabled' : 'Disabled'}</div>
+        </div>
+        <div class="pool-config-card">
+          <div class="label">Active</div>
+          <div class="value">${pool.active_connections}</div>
+        </div>
+        <div class="pool-config-card">
+          <div class="label">Idle TTL</div>
+          <div class="value">${pool.idle_ttl}s</div>
+        </div>
+        <div class="pool-config-card">
+          <div class="label">Max Age</div>
+          <div class="value">${pool.max_age}s</div>
+        </div>
+        <div class="pool-config-card">
+          <div class="label">KA Idle</div>
+          <div class="value">${pool.keepalive_idle}s</div>
+        </div>
+        <div class="pool-config-card">
+          <div class="label">KA Interval</div>
+          <div class="value">${pool.keepalive_interval}s</div>
+        </div>
+        <div class="pool-config-card">
+          <div class="label">KA Probes</div>
+          <div class="value">${pool.keepalive_count}</div>
+        </div>
+      `;
+    }
+
+    function renderConnections(connections) {
+      const container = document.getElementById('connectionsList');
+      const keys = Object.keys(connections);
+
+      if (keys.length === 0) {
+        container.innerHTML = `
+          <div class="conn-empty">
+            <div style="font-size: 32px; margin-bottom: 8px;">~</div>
+            <div><strong>No active connections</strong></div>
+            <div style="margin-top: 4px; font-size: 13px;">
+              Connections appear here when devices are actively being polled and the connection is cached between commands.
+            </div>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = keys.map(key => {
+        const conn = connections[key];
+        const aliveColor = conn.alive ? '#1a7f37' : '#cf222e';
+        const aliveText = conn.alive ? 'Alive' : 'Stale';
+        return `
+          <div class="conn-card">
+            <div class="conn-card-header">
+              <strong>${escapeHtml(key)}</strong>
+              <span class="status-badge ${conn.alive ? 'status-ok' : 'status-error'}">${aliveText}</span>
+            </div>
+            <div class="conn-card-grid">
+              <div class="conn-stat">
+                <div class="label">Host</div>
+                <div class="value">${escapeHtml(conn.host)}</div>
+              </div>
+              <div class="conn-stat">
+                <div class="label">Port</div>
+                <div class="value">${conn.port}</div>
+              </div>
+              <div class="conn-stat">
+                <div class="label">Age</div>
+                <div class="value">${formatSeconds(conn.age_seconds)}</div>
+              </div>
+              <div class="conn-stat">
+                <div class="label">Idle</div>
+                <div class="value">${formatSeconds(conn.idle_seconds)}</div>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    function formatSeconds(s) {
+      if (s < 60) return Math.round(s) + 's';
+      if (s < 3600) return Math.floor(s / 60) + 'm ' + Math.round(s % 60) + 's';
+      return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+    }
+
+    async function flushConnections() {
+      if (!confirm('Close all cached TCP connections?\n\nDevices will reconnect on the next poll cycle.')) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/nl43/_connections/flush', { method: 'POST' });
+        const data = await res.json();
+
+        if (!res.ok) {
+          showToast(data.detail || 'Failed to flush connections', 'error');
+          return;
+        }
+
+        showToast('All connections flushed', 'success');
+        await loadConnections();
+      } catch (err) {
+        showToast('Error flushing connections: ' + err.message, 'error');
+      }
+    }
   </script>
 </body>
 </html>

@@ -92,10 +92,14 @@ async def health():
 
 @app.get("/health/devices")
 async def health_devices():
-    """Enhanced health check that tests device connectivity."""
+    """Enhanced health check that tests device connectivity.
+
+    Uses the connection pool to avoid unnecessary TCP handshakes — if a
+    cached connection exists and is alive, the device is reachable.
+    """
     from sqlalchemy.orm import Session
     from app.database import SessionLocal
-    from app.services import NL43Client
+    from app.services import _connection_pool
     from app.models import NL43Config
 
     db: Session = SessionLocal()
@@ -105,7 +109,7 @@ async def health_devices():
         configs = db.query(NL43Config).filter_by(tcp_enabled=True).all()
 
         for cfg in configs:
-            client = NL43Client(cfg.host, cfg.tcp_port, timeout=2.0, ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password)
+            device_key = f"{cfg.host}:{cfg.tcp_port}"
             status = {
                 "unit_id": cfg.unit_id,
                 "host": cfg.host,
@@ -115,14 +119,22 @@ async def health_devices():
             }
 
             try:
-                # Try to connect (don't send command to avoid rate limiting issues)
-                import asyncio
-                reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection(cfg.host, cfg.tcp_port), timeout=2.0
-                )
-                writer.close()
-                await writer.wait_closed()
-                status["reachable"] = True
+                # Check if pool already has a live connection (zero-cost check)
+                pool_stats = _connection_pool.get_stats()
+                conn_info = pool_stats["connections"].get(device_key)
+                if conn_info and conn_info["alive"]:
+                    status["reachable"] = True
+                    status["source"] = "pool"
+                else:
+                    # No cached connection — do a lightweight acquire/release
+                    # This opens a connection if needed but keeps it in the pool
+                    import asyncio
+                    reader, writer, from_cache = await _connection_pool.acquire(
+                        device_key, cfg.host, cfg.tcp_port, timeout=2.0
+                    )
+                    await _connection_pool.release(device_key, reader, writer, cfg.host, cfg.tcp_port)
+                    status["reachable"] = True
+                    status["source"] = "cached" if from_cache else "new"
             except Exception as e:
                 status["error"] = str(type(e).__name__)
                 logger.warning(f"Device {cfg.unit_id} health check failed: {e}")

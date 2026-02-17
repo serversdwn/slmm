@@ -242,8 +242,8 @@ async def _get_device_lock(device_key: str) -> asyncio.Lock:
 
 # Configuration via environment variables
 TCP_PERSISTENT_ENABLED = os.getenv("TCP_PERSISTENT_ENABLED", "true").lower() == "true"
-TCP_IDLE_TTL = float(os.getenv("TCP_IDLE_TTL", "120"))           # Close idle connections after N seconds
-TCP_MAX_AGE = float(os.getenv("TCP_MAX_AGE", "300"))             # Force reconnect after N seconds
+TCP_IDLE_TTL = float(os.getenv("TCP_IDLE_TTL", "300"))           # Close idle connections after N seconds
+TCP_MAX_AGE = float(os.getenv("TCP_MAX_AGE", "1800"))            # Force reconnect after N seconds
 TCP_KEEPALIVE_IDLE = int(os.getenv("TCP_KEEPALIVE_IDLE", "15"))  # Seconds idle before probes
 TCP_KEEPALIVE_INTERVAL = int(os.getenv("TCP_KEEPALIVE_INTERVAL", "10"))  # Seconds between probes
 TCP_KEEPALIVE_COUNT = int(os.getenv("TCP_KEEPALIVE_COUNT", "3"))  # Failed probes before dead

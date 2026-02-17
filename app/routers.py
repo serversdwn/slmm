@@ -1755,73 +1755,37 @@ async def run_diagnostics(unit_id: str, db: Session = Depends(get_db)):
         "message": "TCP communication enabled"
     }
 
-    # Test 3: Modem/Router reachable (check port 443 HTTPS)
+    # Test 3: TCP connection reachable (device port) — uses connection pool
+    # This avoids extra TCP handshakes over cellular. If a cached connection
+    # exists and is alive, we skip the handshake entirely.
+    from app.services import _connection_pool
+    device_key = f"{cfg.host}:{cfg.tcp_port}"
     try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(cfg.host, 443), timeout=3.0
-        )
-        writer.close()
-        await writer.wait_closed()
-        diagnostics["tests"]["modem_reachable"] = {
-            "status": "pass",
-            "message": f"Modem/router reachable at {cfg.host}"
-        }
-    except asyncio.TimeoutError:
-        diagnostics["tests"]["modem_reachable"] = {
-            "status": "fail",
-            "message": f"Modem/router timeout at {cfg.host} (network issue)"
-        }
-        diagnostics["overall_status"] = "fail"
-        return diagnostics
-    except ConnectionRefusedError:
-        # Connection refused means host is up but port 443 closed - that's ok
-        diagnostics["tests"]["modem_reachable"] = {
-            "status": "pass",
-            "message": f"Modem/router reachable at {cfg.host} (HTTPS closed)"
-        }
-    except Exception as e:
-        diagnostics["tests"]["modem_reachable"] = {
-            "status": "fail",
-            "message": f"Cannot reach modem/router at {cfg.host}: {str(e)}"
-        }
-        diagnostics["overall_status"] = "fail"
-        return diagnostics
-
-    # Test 4: TCP connection reachable (device port)
-    try:
-        reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(cfg.host, cfg.tcp_port), timeout=3.0
-        )
-        writer.close()
-        await writer.wait_closed()
-        diagnostics["tests"]["tcp_connection"] = {
-            "status": "pass",
-            "message": f"TCP connection successful to {cfg.host}:{cfg.tcp_port}"
-        }
-    except asyncio.TimeoutError:
-        diagnostics["tests"]["tcp_connection"] = {
-            "status": "fail",
-            "message": f"Connection timeout to {cfg.host}:{cfg.tcp_port}"
-        }
-        diagnostics["overall_status"] = "fail"
-        return diagnostics
-    except ConnectionRefusedError:
-        diagnostics["tests"]["tcp_connection"] = {
-            "status": "fail",
-            "message": f"Connection refused by {cfg.host}:{cfg.tcp_port}"
-        }
-        diagnostics["overall_status"] = "fail"
-        return diagnostics
+        pool_stats = _connection_pool.get_stats()
+        conn_info = pool_stats["connections"].get(device_key)
+        if conn_info and conn_info["alive"]:
+            # Pool already has a live connection — device is reachable
+            diagnostics["tests"]["tcp_connection"] = {
+                "status": "pass",
+                "message": f"TCP connection alive in pool for {cfg.host}:{cfg.tcp_port}"
+            }
+        else:
+            # Acquire through the pool (opens new if needed, keeps it cached)
+            reader, writer, from_cache = await _connection_pool.acquire(
+                device_key, cfg.host, cfg.tcp_port, timeout=3.0
+            )
+            await _connection_pool.release(device_key, reader, writer, cfg.host, cfg.tcp_port)
+            diagnostics["tests"]["tcp_connection"] = {
+                "status": "pass",
+                "message": f"TCP connection successful to {cfg.host}:{cfg.tcp_port}"
+            }
     except Exception as e:
         diagnostics["tests"]["tcp_connection"] = {
             "status": "fail",
-            "message": f"Connection error: {str(e)}"
+            "message": f"Connection error to {cfg.host}:{cfg.tcp_port}: {str(e)}"
         }
         diagnostics["overall_status"] = "fail"
         return diagnostics
-
-    # Wait a bit after connection test to let device settle
-    await asyncio.sleep(1.5)
 
     # Test 5: Device responds to commands
     # Use longer timeout to account for rate limiting (device requires ≥1s between commands)
