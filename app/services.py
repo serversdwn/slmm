@@ -338,14 +338,14 @@ class ConnectionPool:
                 if self._is_alive(conn):
                     self._drain_buffer(conn.reader)
                     conn.last_used_at = time.time()
-                    logger.debug(f"Pool hit for {device_key} (age={time.time() - conn.created_at:.0f}s)")
+                    logger.info(f"Pool hit for {device_key} (age={time.time() - conn.created_at:.0f}s)")
                     return conn.reader, conn.writer, True
                 else:
                     await self._close_connection(conn, reason="stale")
 
         # Open fresh connection
         reader, writer = await self._open_connection(host, port, timeout)
-        logger.debug(f"New connection opened for {device_key}")
+        logger.info(f"New connection opened for {device_key}")
         return reader, writer, False
 
     async def release(self, device_key: str, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, host: str, port: int):
