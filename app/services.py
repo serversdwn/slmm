@@ -454,11 +454,11 @@ class ConnectionPool:
         """Check whether a cached connection is still usable."""
         now = time.time()
 
-        # Age / idle checks
-        if now - conn.last_used_at > self._idle_ttl:
+        # Age / idle checks (value of -1 disables the check)
+        if self._idle_ttl >= 0 and now - conn.last_used_at > self._idle_ttl:
             logger.debug(f"Connection {conn.device_key} idle too long ({now - conn.last_used_at:.0f}s > {self._idle_ttl}s)")
             return False
-        if now - conn.created_at > self._max_age:
+        if self._max_age >= 0 and now - conn.created_at > self._max_age:
             logger.debug(f"Connection {conn.device_key} too old ({now - conn.created_at:.0f}s > {self._max_age}s)")
             return False
 
