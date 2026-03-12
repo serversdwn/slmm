@@ -1,0 +1,9 @@
+2026-03-12 21:29:42,683 - app.main - INFO - Database tables initialized
+2026-03-12 21:29:42,684 - app.main - INFO - CORS allowed origins: ['*']
+2026-03-12 21:29:42,703 - app.main - INFO - Starting TCP connection pool cleanup task...
+2026-03-12 21:29:42,703 - app.services - INFO - Connection pool cleanup task started
+2026-03-12 21:29:42,703 - app.main - INFO - Starting background poller...
+2026-03-12 21:29:42,703 - app.background_poller - INFO - Background poller task created
+2026-03-12 21:29:42,703 - app.main - INFO - Background poller started
+2026-03-12 21:29:42,703 - app.background_poller - INFO - Background polling loop started
+2026-03-12 21:29:42,708 - app.background_poller - INFO - [POOL] No active connections in pool
