@@ -38,6 +38,7 @@ class BackgroundPoller:
         self._running = False
         self._logger = logger
         self._last_cleanup = None  # Track last log cleanup time
+        self._last_pool_log = None  # Track last connection pool heartbeat log
 
     async def start(self):
         """Start the background polling task."""
@@ -88,6 +89,24 @@ class BackgroundPoller:
                     self._last_cleanup = now
             except Exception as e:
                 self._logger.warning(f"Log cleanup failed: {e}")
+
+            # Log connection pool status every 15 minutes
+            try:
+                now = datetime.utcnow()
+                if self._last_pool_log is None or (now - self._last_pool_log).total_seconds() > 900:
+                    from app.services import _connection_pool
+                    stats = _connection_pool.get_stats()
+                    conns = stats.get("connections", {})
+                    if conns:
+                        for key, c in conns.items():
+                            self._logger.info(
+                                f"[POOL] {key} — age={c['age_seconds']}s idle={c['idle_seconds']}s alive={c['alive']}"
+                            )
+                    else:
+                        self._logger.info("[POOL] No active connections in pool")
+                    self._last_pool_log = now
+            except Exception as e:
+                self._logger.warning(f"Pool status log failed: {e}")
 
             # Calculate dynamic sleep interval
             sleep_time = self._calculate_sleep_interval()

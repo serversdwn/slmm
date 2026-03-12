@@ -338,14 +338,14 @@ class ConnectionPool:
                 if self._is_alive(conn):
                     self._drain_buffer(conn.reader)
                     conn.last_used_at = time.time()
-                    logger.debug(f"Pool hit for {device_key} (age={time.time() - conn.created_at:.0f}s)")
+                    logger.info(f"Pool hit for {device_key} (age={time.time() - conn.created_at:.0f}s)")
                     return conn.reader, conn.writer, True
                 else:
                     await self._close_connection(conn, reason="stale")
 
         # Open fresh connection
         reader, writer = await self._open_connection(host, port, timeout)
-        logger.debug(f"New connection opened for {device_key}")
+        logger.info(f"New connection opened for {device_key}")
         return reader, writer, False
 
     async def release(self, device_key: str, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, host: str, port: int):
@@ -454,11 +454,11 @@ class ConnectionPool:
         """Check whether a cached connection is still usable."""
         now = time.time()
 
-        # Age / idle checks
-        if now - conn.last_used_at > self._idle_ttl:
+        # Age / idle checks (value of -1 disables the check)
+        if self._idle_ttl >= 0 and now - conn.last_used_at > self._idle_ttl:
             logger.debug(f"Connection {conn.device_key} idle too long ({now - conn.last_used_at:.0f}s > {self._idle_ttl}s)")
             return False
-        if now - conn.created_at > self._max_age:
+        if self._max_age >= 0 and now - conn.created_at > self._max_age:
             logger.debug(f"Connection {conn.device_key} too old ({now - conn.created_at:.0f}s > {self._max_age}s)")
             return False
 
