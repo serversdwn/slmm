@@ -41,6 +41,8 @@ class NL43Status(Base):
     lmax = Column(String, nullable=True)  # Maximum level
     lmin = Column(String, nullable=True)  # Minimum level
     lpeak = Column(String, nullable=True)  # Peak level
+    ln1 = Column(String, nullable=True)  # Percentile slot LN1 (configurable; device default L5, contract L1)
+    ln2 = Column(String, nullable=True)  # Percentile slot LN2 (configurable; device default L10)
     battery_level = Column(String, nullable=True)
     power_source = Column(String, nullable=True)
     sd_remaining_mb = Column(String, nullable=True)

@@ -46,6 +46,8 @@ class NL43Snapshot:
     lmax: Optional[str] = None  # Maximum level
     lmin: Optional[str] = None  # Minimum level
     lpeak: Optional[str] = None  # Peak level
+    ln1: Optional[str] = None  # Percentile slot LN1 (configurable; device default L5, contract L1)
+    ln2: Optional[str] = None  # Percentile slot LN2 (configurable; device default L10)
     battery_level: Optional[str] = None
     power_source: Optional[str] = None
     sd_remaining_mb: Optional[str] = None
@@ -108,6 +110,8 @@ def persist_snapshot(s: NL43Snapshot, db: Session):
         row.lmax = s.lmax
         row.lmin = s.lmin
         row.lpeak = s.lpeak
+        row.ln1 = s.ln1
+        row.ln2 = s.ln2
         row.battery_level = s.battery_level
         row.power_source = s.power_source
         row.sd_remaining_mb = s.sd_remaining_mb
@@ -716,9 +720,10 @@ class NL43Client:
                 snap.lmin = parts[4]    # Lmin
             if len(parts) >= 11:
                 snap.lpeak = parts[10]  # Lpeak  (parts[5] is LN1, NOT Lpeak)
-            # LN1/LN2 percentiles live at parts[5]/parts[6] (the L1/L10 display contract).
-            # Surfaced as snap.ln1/snap.ln2 once those fields are added to the snapshot
-            # dataclass + NL43Status model — next step on this branch.
+            if len(parts) >= 6:
+                snap.ln1 = parts[5]     # LN1 percentile slot (device default L5; contract L1)
+            if len(parts) >= 7:
+                snap.ln2 = parts[6]     # LN2 percentile slot (device default L10)
         except (IndexError, ValueError) as e:
             logger.warning(f"Error parsing DOD data points: {e}")
 

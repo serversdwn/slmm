@@ -450,6 +450,8 @@ def get_status(unit_id: str, db: Session = Depends(get_db)):
             "lmax": status.lmax,
             "lmin": status.lmin,
             "lpeak": status.lpeak,
+            "ln1": status.ln1,
+            "ln2": status.ln2,
             "battery_level": status.battery_level,
             "power_source": status.power_source,
             "sd_remaining_mb": status.sd_remaining_mb,
@@ -472,6 +474,8 @@ class StatusPayload(BaseModel):
     lmax: str | None = None
     lmin: str | None = None
     lpeak: str | None = None
+    ln1: str | None = None
+    ln2: str | None = None
     battery_level: str | None = None
     power_source: str | None = None
     sd_remaining_mb: str | None = None
@@ -504,6 +508,8 @@ def upsert_status(unit_id: str, payload: StatusPayload, db: Session = Depends(ge
             "lmax": status.lmax,
             "lmin": status.lmin,
             "lpeak": status.lpeak,
+            "ln1": status.ln1,
+            "ln2": status.ln2,
             "battery_level": status.battery_level,
             "power_source": status.power_source,
             "sd_remaining_mb": status.sd_remaining_mb,
@@ -1205,6 +1211,8 @@ async def stream_live(websocket: WebSocket, unit_id: str):
                     "lmax": snap.lmax,  # Maximum level
                     "lmin": snap.lmin,  # Minimum level
                     "lpeak": snap.lpeak,  # Peak level
+                    "ln1": snap.ln1,    # LN1 percentile (L1/L10 contract); null on DRD stream
+                    "ln2": snap.ln2,    # LN2 percentile; null on DRD stream
                     "raw_payload": snap.raw_payload,
                 })
             except Exception as e:
@@ -1876,6 +1884,8 @@ async def run_diagnostics(unit_id: str, db: Session = Depends(get_db)):
             "lmax": status.lmax,
             "lmin": status.lmin,
             "lpeak": status.lpeak,
+            "ln1": status.ln1,
+            "ln2": status.ln2,
             "battery_level": status.battery_level,
             "power_source": status.power_source,
             "sd_remaining_mb": status.sd_remaining_mb,
