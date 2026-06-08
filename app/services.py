@@ -69,10 +69,16 @@ def persist_snapshot(s: NL43Snapshot, db: Session):
 
         logger.info(f"State transition check for {s.unit_id}: '{previous_state}' -> '{new_state}'")
 
-        # Device returns "Start" when measuring, "Stop" when stopped
-        # Normalize to previous behavior for backward compatibility
-        is_measuring = new_state == "Start"
-        was_measuring = previous_state == "Start"
+        # The device reports "Start" while measuring; the DOD path uses that string,
+        # but the DRD stream path tags snapshots "Measure" (and the DOD fallback also
+        # uses "Measure"). Treat ALL of these as "measuring" — otherwise opening and
+        # closing the live stream flips state "Start"->"Measure"->"Start", which the
+        # old equality check misread as stop-then-start and RESET measurement_start_time
+        # every single time (the "elapsed time keeps resetting / shows wrong value on
+        # another computer" bug — and each extra viewer made it worse).
+        MEASURING_STATES = {"Start", "Measure"}
+        is_measuring = new_state in MEASURING_STATES
+        was_measuring = previous_state in MEASURING_STATES
 
         if not was_measuring and is_measuring:
             # Measurement just started - record the start time
@@ -691,22 +697,28 @@ class NL43Client:
 
         snap = NL43Snapshot(unit_id="", raw_payload=resp, measurement_state=measurement_state)
 
-        # Parse known positions (based on NL43 communication guide - DRD format)
-        # DRD format: d0=counter, d1=Lp, d2=Leq, d3=Lmax, d4=Lmin, d5=Lpeak, d6=LIeq, ...
+        # Parse DOD positional fields. DOD's layout is DIFFERENT from DRD: it has NO
+        # leading counter and it includes LE plus LN1–LN5. The device returns 4 channels
+        # of 16 fields each — [Lp, Leq, LE, Lmax, Lmin, LN1, LN2, LN3, LN4, LN5, Lpeak,
+        # LIeq, Leq_mov, Ltm5, over, under] — and channel 1 (parts[0:16]) is the main
+        # display. The previous code reused the DRD map (treating parts[0] as a counter),
+        # which shifted everything: Lp was reported as the counter, Leq as Lp, LE as Leq,
+        # and LN1 as Lpeak (you could spot it because "Lpeak" came out < Lmax).
         try:
-            # Capture d0 (counter) for timer synchronization
             if len(parts) >= 1:
-                snap.counter = parts[0]  # d0: Measurement interval counter (1-600)
+                snap.lp = parts[0]      # Lp: instantaneous sound pressure level
             if len(parts) >= 2:
-                snap.lp = parts[1]     # d1: Instantaneous sound pressure level
-            if len(parts) >= 3:
-                snap.leq = parts[2]    # d2: Equivalent continuous sound level
+                snap.leq = parts[1]     # Leq: equivalent continuous level
+            # parts[2] = LE (sound exposure level) — not currently surfaced
             if len(parts) >= 4:
-                snap.lmax = parts[3]   # d3: Maximum level
+                snap.lmax = parts[3]    # Lmax
             if len(parts) >= 5:
-                snap.lmin = parts[4]   # d4: Minimum level
-            if len(parts) >= 6:
-                snap.lpeak = parts[5]  # d5: Peak level
+                snap.lmin = parts[4]    # Lmin
+            if len(parts) >= 11:
+                snap.lpeak = parts[10]  # Lpeak  (parts[5] is LN1, NOT Lpeak)
+            # LN1/LN2 percentiles live at parts[5]/parts[6] (the L1/L10 display contract).
+            # Surfaced as snap.ln1/snap.ln2 once those fields are added to the snapshot
+            # dataclass + NL43Status model — next step on this branch.
         except (IndexError, ValueError) as e:
             logger.warning(f"Error parsing DOD data points: {e}")
 
