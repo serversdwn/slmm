@@ -338,14 +338,14 @@ class ConnectionPool:
                 if self._is_alive(conn):
                     self._drain_buffer(conn.reader)
                     conn.last_used_at = time.time()
-                    logger.debug(f"Pool hit for {device_key} (age={time.time() - conn.created_at:.0f}s)")
+                    logger.info(f"Pool hit for {device_key} (age={time.time() - conn.created_at:.0f}s)")
                     return conn.reader, conn.writer, True
                 else:
                     await self._close_connection(conn, reason="stale")
 
         # Open fresh connection
         reader, writer = await self._open_connection(host, port, timeout)
-        logger.debug(f"New connection opened for {device_key}")
+        logger.info(f"New connection opened for {device_key}")
         return reader, writer, False
 
     async def release(self, device_key: str, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, host: str, port: int):
@@ -454,11 +454,11 @@ class ConnectionPool:
         """Check whether a cached connection is still usable."""
         now = time.time()
 
-        # Age / idle checks
-        if now - conn.last_used_at > self._idle_ttl:
+        # Age / idle checks (value of -1 disables the check)
+        if self._idle_ttl >= 0 and now - conn.last_used_at > self._idle_ttl:
             logger.debug(f"Connection {conn.device_key} idle too long ({now - conn.last_used_at:.0f}s > {self._idle_ttl}s)")
             return False
-        if now - conn.created_at > self._max_age:
+        if self._max_age >= 0 and now - conn.created_at > self._max_age:
             logger.debug(f"Connection {conn.device_key} too old ({now - conn.created_at:.0f}s > {self._max_age}s)")
             return False
 
@@ -896,15 +896,20 @@ class NL43Client:
         # Acquire per-device lock - held for entire streaming session
         device_lock = await _get_device_lock(self.device_key)
         async with device_lock:
-            # Evict any cached connection — streaming needs its own dedicated socket
-            await _connection_pool.discard(self.device_key)
             await self._enforce_rate_limit()
 
             logger.info(f"Starting DRD stream for {self.device_key}")
 
+            # Reuse the pooled connection instead of discard()+reopen. The NL43
+            # allows only ONE TCP connection at a time, and on a cellular link the
+            # device does not free its single slot fast enough for an immediate
+            # reconnect — so a fresh connect times out (the DRD stream failure).
+            # The per-device lock is held for the whole session, so it already
+            # blocks the poller; reusing the warm socket keeps us at exactly one
+            # connection and lets the stream start on the slot commands already use.
             try:
-                reader, writer = await _connection_pool._open_connection(
-                    self.host, self.port, self.timeout
+                reader, writer, from_cache = await _connection_pool.acquire(
+                    self.device_key, self.host, self.port, self.timeout
                 )
             except ConnectionError:
                 logger.error(f"DRD stream connection failed to {self.device_key}")
@@ -981,16 +986,20 @@ class NL43Client:
                         break
 
             finally:
-                # Send SUB character to stop streaming
+                # Stop streaming on the device (SUB = 0x1A), then return the warm
+                # connection to the pool so subsequent commands reuse this single
+                # socket instead of opening a second one. release() returns healthy
+                # sockets to the pool and closes dead ones; the next acquire()
+                # drains any residual stop output before reuse.
                 try:
                     writer.write(b"\x1A")
                     await writer.drain()
                 except Exception:
                     pass
 
-                writer.close()
-                with contextlib.suppress(Exception):
-                    await writer.wait_closed()
+                await _connection_pool.release(
+                    self.device_key, reader, writer, self.host, self.port
+                )
 
                 logger.info(f"DRD stream ended for {self.device_key}")
 
