@@ -76,12 +76,12 @@ app.include_router(routers.router)
 
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/roster", response_class=HTMLResponse)
 def roster(request: Request):
-    return templates.TemplateResponse("roster.html", {"request": request})
+    return templates.TemplateResponse(request, "roster.html")
 
 
 @app.get("/health")
