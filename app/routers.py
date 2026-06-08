@@ -121,6 +121,38 @@ async def flush_connection_pool():
     return {"status": "ok", "message": "All cached connections closed"}
 
 
+@router.post("/{unit_id}/disconnect")
+async def disconnect_device(unit_id: str, db: Session = Depends(get_db)):
+    """Cleanly close SLMM's persistent TCP connection to a single device.
+
+    Gracefully closes (TCP FIN + wait_closed) the pooled connection for this
+    device and removes it from the pool, freeing the NL43's single connection
+    slot. Idempotent — a no-op if no connection is currently cached.
+
+    Note: this releases the *idle* pooled connection. It does not interrupt an
+    in-progress DRD stream or an in-flight command (those have the socket
+    checked out of the pool) — close the stream WebSocket to end a live stream.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    from app.services import _connection_pool
+
+    device_key = f"{cfg.host}:{cfg.tcp_port}"
+    had_conn = device_key in _connection_pool.get_stats().get("connections", {})
+
+    await _connection_pool.discard(device_key)
+
+    return {
+        "status": "ok",
+        "unit_id": unit_id,
+        "device_key": device_key,
+        "disconnected": had_conn,
+        "message": "Connection closed" if had_conn else "No cached connection to close",
+    }
+
+
 # ============================================================================
 # GLOBAL POLLING STATUS ENDPOINT (must be before /{unit_id} routes)
 # ============================================================================
