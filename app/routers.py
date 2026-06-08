@@ -247,6 +247,80 @@ async def system_resume():
 
 
 # ============================================================================
+# LIVE MONITOR (fan-out) — one DOD feed per device, broadcast to many clients
+# ============================================================================
+
+@router.websocket("/{unit_id}/monitor")
+async def monitor_stream(websocket: WebSocket, unit_id: str):
+    """Subscribe a browser to the device's shared 1 Hz DOD feed.
+
+    Any number of clients can attach without each opening its own device
+    connection (one poll loop per device, fanned out). Same JSON shape as the
+    DRD stream, but DOD-sourced so it includes ln1/ln2 (L1/L10).
+    """
+    await websocket.accept()
+    from app.monitor import monitor_manager
+
+    monitor = await monitor_manager.get(unit_id)
+    queue = await monitor.subscribe()
+    logger.info(f"Monitor subscriber attached for {unit_id} ({monitor.subscriber_count()} total)")
+
+    async def _watch_disconnect():
+        # Completes when the client disconnects, so an idle feed (no data) still
+        # detects the drop and we don't leak a subscription that keeps the device
+        # feed (and its connection) alive.
+        try:
+            while True:
+                msg = await websocket.receive()
+                if msg.get("type") == "websocket.disconnect":
+                    return
+        except Exception:
+            return
+
+    gone = asyncio.ensure_future(_watch_disconnect())
+    try:
+        while not gone.done():
+            try:
+                payload = await asyncio.wait_for(queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue  # re-check gone.done()
+            await websocket.send_json(payload)
+    except WebSocketDisconnect:
+        logger.info(f"Monitor subscriber disconnected for {unit_id}")
+    except Exception as e:
+        logger.warning(f"Monitor stream error for {unit_id}: {e}")
+    finally:
+        gone.cancel()
+        await monitor.unsubscribe(queue)
+
+
+@router.post("/{unit_id}/monitor/start")
+async def monitor_start(unit_id: str):
+    """Keep the device's feed running even with no browser attached, so alerting
+    evaluates continuously. Runtime-only (resets on restart)."""
+    from app.monitor import monitor_manager
+    monitor = await monitor_manager.get(unit_id)
+    await monitor.set_keepalive(True)
+    return {"status": "ok", "unit_id": unit_id, "running": monitor.running, "keepalive": True}
+
+
+@router.post("/{unit_id}/monitor/stop")
+async def monitor_stop(unit_id: str):
+    """Drop the keep-alive; the feed stops once no browser subscribers remain."""
+    from app.monitor import monitor_manager
+    monitor = await monitor_manager.get(unit_id)
+    await monitor.set_keepalive(False)
+    return {"status": "ok", "unit_id": unit_id, "keepalive": False}
+
+
+@router.get("/_monitor/status")
+async def monitor_status():
+    """Status of every device monitor (running, subscriber count, keep-alive)."""
+    from app.monitor import monitor_manager
+    return {"status": "ok", "monitors": monitor_manager.status()}
+
+
+# ============================================================================
 # GLOBAL POLLING STATUS ENDPOINT (must be before /{unit_id} routes)
 # ============================================================================
 
