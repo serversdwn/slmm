@@ -153,6 +153,99 @@ async def disconnect_device(unit_id: str, db: Session = Depends(get_db)):
     }
 
 
+@router.post("/{unit_id}/deactivate")
+async def deactivate_device(unit_id: str, db: Session = Depends(get_db)):
+    """Make a single unit dormant: stop background polling for it AND drop its
+    connection, freeing the device's connection slot. poll_enabled=False is
+    persisted, so the unit stays dormant across restarts until /activate.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    cfg.poll_enabled = False
+    db.commit()
+
+    from app.services import _connection_pool, _get_device_lock
+
+    device_key = f"{cfg.host}:{cfg.tcp_port}"
+
+    # Wait briefly for any in-flight poll/command to finish (so its connection is
+    # back in the pool), then drop it. If a long-lived stream holds the lock we
+    # don't block forever — discard the pooled connection regardless.
+    lock = await _get_device_lock(device_key)
+    acquired = False
+    try:
+        await asyncio.wait_for(lock.acquire(), timeout=10.0)
+        acquired = True
+    except asyncio.TimeoutError:
+        acquired = False
+    try:
+        await _connection_pool.discard(device_key)
+    finally:
+        if acquired:
+            lock.release()
+
+    return {
+        "status": "ok",
+        "unit_id": unit_id,
+        "poll_enabled": False,
+        "message": "Polling disabled and connection closed for this unit",
+    }
+
+
+@router.post("/{unit_id}/activate")
+async def activate_device(unit_id: str, db: Session = Depends(get_db)):
+    """Resume background polling for a unit previously deactivated."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    cfg.poll_enabled = True
+    db.commit()
+
+    return {
+        "status": "ok",
+        "unit_id": unit_id,
+        "poll_enabled": True,
+        "message": "Polling enabled for this unit",
+    }
+
+
+@router.get("/_system/status")
+async def system_status():
+    """Report whether this SLMM instance is actively polling or in standby."""
+    from app.background_poller import poller
+    from app.services import _connection_pool
+    return {
+        "status": "ok",
+        "mode": "active" if poller.is_active() else "standby",
+        "polling_active": poller.is_active(),
+        "active_connections": _connection_pool.get_stats().get("active_connections", 0),
+    }
+
+
+@router.post("/_system/standby")
+async def system_standby():
+    """Put this SLMM instance into standby: stop polling ALL devices and release
+    every connection, so it stops occupying device slots (e.g. so a prod instance
+    can take over). Runtime-only — on restart the instance returns to its
+    SLMM_POLLING_ENABLED default.
+    """
+    from app.background_poller import poller
+    await poller.set_active(False)
+    return {"status": "ok", "mode": "standby",
+            "message": "Polling stopped and all device connections released"}
+
+
+@router.post("/_system/resume")
+async def system_resume():
+    """Resume polling after standby (global)."""
+    from app.background_poller import poller
+    await poller.set_active(True)
+    return {"status": "ok", "mode": "active", "message": "Polling resumed"}
+
+
 # ============================================================================
 # GLOBAL POLLING STATUS ENDPOINT (must be before /{unit_id} routes)
 # ============================================================================

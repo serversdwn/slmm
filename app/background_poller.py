@@ -8,6 +8,7 @@ for fast API access without querying devices on every request.
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -19,6 +20,11 @@ from app.services import NL43Client, persist_snapshot, sync_measurement_start_ti
 from app.device_logger import log_device_event, cleanup_old_logs
 
 logger = logging.getLogger(__name__)
+
+# Global polling default. Set SLMM_POLLING_ENABLED=false to start an instance in
+# standby (running but not polling and not holding device connections) — e.g. a
+# dev box that must not latch onto a device that a prod instance owns.
+POLLING_ENABLED_DEFAULT = os.getenv("SLMM_POLLING_ENABLED", "true").lower() == "true"
 
 
 class BackgroundPoller:
@@ -39,6 +45,7 @@ class BackgroundPoller:
         self._logger = logger
         self._last_cleanup = None  # Track last log cleanup time
         self._last_pool_log = None  # Track last connection pool heartbeat log
+        self._active = POLLING_ENABLED_DEFAULT  # Global polling on/off (standby toggle)
 
     async def start(self):
         """Start the background polling task."""
@@ -71,15 +78,48 @@ class BackgroundPoller:
 
         self._logger.info("Background poller stopped")
 
+    def is_active(self) -> bool:
+        """Whether background polling is currently active (vs standby)."""
+        return self._active
+
+    async def set_active(self, active: bool):
+        """Globally enable/disable polling at runtime.
+
+        When deactivated, the loop stays alive but polls nothing and releases all
+        device connections, so this SLMM instance stops occupying the devices'
+        single connection slots (e.g. so a prod instance can take over). Runtime
+        state only — on restart the instance returns to SLMM_POLLING_ENABLED.
+        """
+        self._active = active
+        if active:
+            self._logger.info("[SYSTEM] Background polling ACTIVATED")
+        else:
+            self._logger.info("[SYSTEM] Background polling DEACTIVATED (standby) — releasing connections")
+            await self._release_all_connections()
+
+    async def _release_all_connections(self):
+        """Gracefully close every pooled device connection (no-op if none)."""
+        from app.services import _connection_pool
+        for device_key in list(_connection_pool.get_stats().get("connections", {})):
+            await _connection_pool.discard(device_key)
+
     async def _poll_loop(self):
         """Main polling loop that runs continuously."""
         self._logger.info("Background polling loop started")
 
         while self._running:
-            try:
-                await self._poll_all_devices()
-            except Exception as e:
-                self._logger.error(f"Error in poll loop: {e}", exc_info=True)
+            if self._active:
+                try:
+                    await self._poll_all_devices()
+                except Exception as e:
+                    self._logger.error(f"Error in poll loop: {e}", exc_info=True)
+            else:
+                # Standby: poll nothing, and keep holding no device connection slots
+                # so another SLMM instance (e.g. prod) can talk to the devices.
+                try:
+                    await self._release_all_connections()
+                except Exception as e:
+                    self._logger.warning(f"Standby connection release failed: {e}")
 
             # Run log cleanup once per hour
             try:
