@@ -75,12 +75,23 @@ def persist_snapshot(s: NL43Snapshot, db: Session):
         # but the DRD stream path tags snapshots "Measure" (and the DOD fallback also
         # uses "Measure"). Treat ALL of these as "measuring" — otherwise opening and
         # closing the live stream flips state "Start"->"Measure"->"Start", which the
-        # old equality check misread as stop-then-start and RESET measurement_start_time
-        # every single time (the "elapsed time keeps resetting / shows wrong value on
-        # another computer" bug — and each extra viewer made it worse).
+        # old equality check misread as stop-then-start and reset measurement_start_time.
+        #
+        # Also: only act on RECOGNIZED states. A buffer desync on the shared connection
+        # (e.g. right after a DRD/DOD test) can make a Measure? read return a stray,
+        # garbled value; treating that as "not measuring" produced constant phantom
+        # "STOPPED -> STARTED" log pairs and reset the timer. Ignore unknown reads.
         MEASURING_STATES = {"Start", "Measure"}
-        is_measuring = new_state in MEASURING_STATES
+        STOPPED_STATES = {"Stop"}
         was_measuring = previous_state in MEASURING_STATES
+
+        if new_state in MEASURING_STATES:
+            is_measuring = True
+        elif new_state in STOPPED_STATES:
+            is_measuring = False
+        else:
+            logger.warning(f"Ignoring unrecognized measurement state for {s.unit_id}: {new_state!r}")
+            is_measuring = was_measuring  # garbled/unknown read — no transition
 
         if not was_measuring and is_measuring:
             # Measurement just started - record the start time
@@ -103,7 +114,10 @@ def persist_snapshot(s: NL43Snapshot, db: Session):
             except Exception:
                 pass
 
-        row.measurement_state = new_state
+        # Only persist a recognized state so one garbled read can't poison the next
+        # transition check (which would manufacture the phantom STOPPED/STARTED pair).
+        if new_state in MEASURING_STATES or new_state in STOPPED_STATES:
+            row.measurement_state = new_state
         row.counter = s.counter
         row.lp = s.lp
         row.leq = s.leq
