@@ -295,22 +295,32 @@ async def monitor_stream(websocket: WebSocket, unit_id: str):
 
 
 @router.post("/{unit_id}/monitor/start")
-async def monitor_start(unit_id: str):
-    """Keep the device's feed running even with no browser attached, so alerting
-    evaluates continuously. Runtime-only (resets on restart)."""
+async def monitor_start(unit_id: str, db: Session = Depends(get_db)):
+    """Enable 24/7 keepalive monitoring: persist monitor_enabled and start the feed
+    now, so alerting evaluates continuously even with no viewer. Survives restarts
+    (auto-started on boot from the persisted flag)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if cfg:
+        cfg.monitor_enabled = True
+        db.commit()
     from app.monitor import monitor_manager
     monitor = await monitor_manager.get(unit_id)
     await monitor.set_keepalive(True)
-    return {"status": "ok", "unit_id": unit_id, "running": monitor.running, "keepalive": True}
+    return {"status": "ok", "unit_id": unit_id, "monitor_enabled": True, "running": monitor.running}
 
 
 @router.post("/{unit_id}/monitor/stop")
-async def monitor_stop(unit_id: str):
-    """Drop the keep-alive; the feed stops once no browser subscribers remain."""
+async def monitor_stop(unit_id: str, db: Session = Depends(get_db)):
+    """Disable keepalive monitoring: persist monitor_enabled=False and drop the
+    keepalive (the feed stops once no browser subscribers remain)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if cfg:
+        cfg.monitor_enabled = False
+        db.commit()
     from app.monitor import monitor_manager
     monitor = await monitor_manager.get(unit_id)
     await monitor.set_keepalive(False)
-    return {"status": "ok", "unit_id": unit_id, "keepalive": False}
+    return {"status": "ok", "unit_id": unit_id, "monitor_enabled": False}
 
 
 @router.get("/_monitor/status")
@@ -501,6 +511,7 @@ def get_roster(db: Session = Depends(get_db)):
             "web_enabled": cfg.web_enabled,
             "poll_enabled": cfg.poll_enabled,
             "poll_interval_seconds": cfg.poll_interval_seconds,
+            "monitor_enabled": cfg.monitor_enabled,
             "status": None
         }
 

@@ -23,6 +23,10 @@ class NL43Config(Base):
     poll_interval_seconds = Column(Integer, nullable=True, default=60)  # Polling interval (10-3600 seconds)
     poll_enabled = Column(Boolean, default=True)  # Enable/disable background polling for this device
 
+    # Live monitor (fan-out DOD feed). Keepalive runs it 24/7 even with no viewer,
+    # which is what makes alerting continuous. On by default; toggleable from the UI.
+    monitor_enabled = Column(Boolean, default=True)
+
 
 class NL43Status(Base):
     """

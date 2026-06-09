@@ -38,6 +38,25 @@ async def lifespan(app: FastAPI):
     await poller.start()
     logger.info("Background poller started")
 
+    # Auto-start keepalive live monitors for units configured for 24/7 monitoring
+    # (monitor_enabled). This is what keeps alerting running unattended across
+    # restarts — without it a feed only runs while someone has the live view open.
+    try:
+        from app.monitor import monitor_manager
+        from app.database import SessionLocal
+        from app.models import NL43Config
+        db = SessionLocal()
+        try:
+            units = db.query(NL43Config).filter_by(monitor_enabled=True, tcp_enabled=True).all()
+            for cfg in units:
+                m = await monitor_manager.get(cfg.unit_id)
+                await m.set_keepalive(True)
+                logger.info(f"Auto-started keepalive monitor for {cfg.unit_id}")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Failed to auto-start monitors: {e}")
+
     yield  # Application runs
 
     # Shutdown
