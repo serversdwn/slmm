@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Boolean, Integer, Text, func
+from sqlalchemy import Column, String, DateTime, Boolean, Integer, Float, Text, func
 from app.database import Base
 
 
@@ -74,3 +74,53 @@ class DeviceLog(Base):
     level = Column(String, default="INFO")  # DEBUG, INFO, WARNING, ERROR
     category = Column(String, default="GENERAL")  # TCP, FTP, POLL, COMMAND, STATE, SYNC
     message = Column(Text, nullable=False)
+
+
+class AlertRule(Base):
+    """A threshold-alert rule evaluated against a unit's live monitor feed.
+
+    Source-agnostic: today it runs over the DOD monitor; the same rule transfers
+    unchanged if a unit's feed is later sourced from FTP intervals.
+    """
+
+    __tablename__ = "alert_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    unit_id = Column(String, index=True, nullable=False)
+    name = Column(String, nullable=False, default="Alert")
+    metric = Column(String, nullable=False, default="lp")  # lp/leq/lmax/lmin/lpeak/ln1/ln2
+    comparison = Column(String, nullable=False, default="above")  # above | below
+    threshold_db = Column(Float, nullable=False)
+    duration_s = Column(Integer, nullable=False, default=0)       # sustained seconds (0 = instant)
+    clear_margin_db = Column(Float, nullable=False, default=2.0)  # hysteresis band
+    cooldown_s = Column(Integer, nullable=False, default=300)     # min seconds between onsets
+    # Optional time-of-day scoping (local time). schedule_start/end as "HH:MM";
+    # null = always active. schedule_days = CSV of 0-6 (Mon=0); null = every day.
+    schedule_start = Column(String, nullable=True)
+    schedule_end = Column(String, nullable=True)
+    schedule_days = Column(String, nullable=True)
+    channels = Column(String, nullable=False, default="log")  # CSV: log,email,sms
+    recipients = Column(Text, nullable=True)                  # CSV of emails/phones
+    enabled = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+
+
+class AlertEvent(Base):
+    """A fired alert (onset → clear), for history / inbox / acknowledgement."""
+
+    __tablename__ = "alert_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    rule_id = Column(Integer, index=True, nullable=False)
+    unit_id = Column(String, index=True, nullable=False)
+    rule_name = Column(String, nullable=True)
+    metric = Column(String, nullable=False)
+    threshold_db = Column(Float, nullable=False)
+    onset_at = Column(DateTime, default=func.now(), index=True)
+    onset_value = Column(Float, nullable=True)
+    peak_value = Column(Float, nullable=True)
+    clear_at = Column(DateTime, nullable=True)
+    status = Column(String, default="active")  # active | cleared
+    acknowledged_at = Column(DateTime, nullable=True)
+    acknowledged_by = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)

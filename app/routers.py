@@ -11,7 +11,7 @@ import os
 import asyncio
 
 from app.database import get_db
-from app.models import NL43Config, NL43Status
+from app.models import NL43Config, NL43Status, AlertRule, AlertEvent
 from app.services import NL43Client, persist_snapshot
 
 logger = logging.getLogger(__name__)
@@ -318,6 +318,111 @@ async def monitor_status():
     """Status of every device monitor (running, subscriber count, keep-alive)."""
     from app.monitor import monitor_manager
     return {"status": "ok", "monitors": monitor_manager.status()}
+
+
+# ============================================================================
+# ALERTS — threshold rules + fired events
+# ============================================================================
+
+class AlertRulePayload(BaseModel):
+    name: str = "Alert"
+    metric: str = "lp"            # lp/leq/lmax/lmin/lpeak/ln1/ln2
+    comparison: str = "above"     # above | below
+    threshold_db: float
+    duration_s: int = 0           # sustained seconds before firing (0 = instant)
+    clear_margin_db: float = 2.0  # hysteresis band
+    cooldown_s: int = 300
+    schedule_start: str | None = None  # "HH:MM" local; null = always
+    schedule_end: str | None = None
+    schedule_days: str | None = None   # CSV of 0-6 (Mon=0); null = every day
+    channels: str = "log"
+    recipients: str | None = None
+    enabled: bool = True
+
+
+def _rule_dict(r: AlertRule) -> dict:
+    return {
+        "id": r.id, "unit_id": r.unit_id, "name": r.name, "metric": r.metric,
+        "comparison": r.comparison, "threshold_db": r.threshold_db,
+        "duration_s": r.duration_s, "clear_margin_db": r.clear_margin_db,
+        "cooldown_s": r.cooldown_s, "schedule_start": r.schedule_start,
+        "schedule_end": r.schedule_end, "schedule_days": r.schedule_days,
+        "channels": r.channels, "recipients": r.recipients, "enabled": r.enabled,
+    }
+
+
+def _event_dict(e: AlertEvent) -> dict:
+    return {
+        "id": e.id, "rule_id": e.rule_id, "unit_id": e.unit_id,
+        "rule_name": e.rule_name, "metric": e.metric, "threshold_db": e.threshold_db,
+        "onset_at": e.onset_at.isoformat() if e.onset_at else None,
+        "onset_value": e.onset_value, "peak_value": e.peak_value,
+        "clear_at": e.clear_at.isoformat() if e.clear_at else None,
+        "status": e.status,
+        "acknowledged_at": e.acknowledged_at.isoformat() if e.acknowledged_at else None,
+        "acknowledged_by": e.acknowledged_by,
+    }
+
+
+@router.post("/{unit_id}/alerts/rules")
+def create_alert_rule(unit_id: str, payload: AlertRulePayload, db: Session = Depends(get_db)):
+    rule = AlertRule(unit_id=unit_id, **payload.model_dump())
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    from app.alerts import alert_evaluator
+    alert_evaluator.invalidate(unit_id)
+    return {"status": "ok", "rule": _rule_dict(rule)}
+
+
+@router.get("/{unit_id}/alerts/rules")
+def list_alert_rules(unit_id: str, db: Session = Depends(get_db)):
+    rules = db.query(AlertRule).filter_by(unit_id=unit_id).all()
+    return {"status": "ok", "rules": [_rule_dict(r) for r in rules]}
+
+
+@router.put("/{unit_id}/alerts/rules/{rule_id}")
+def update_alert_rule(unit_id: str, rule_id: int, payload: AlertRulePayload, db: Session = Depends(get_db)):
+    rule = db.query(AlertRule).filter_by(id=rule_id, unit_id=unit_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Alert rule not found")
+    for field, value in payload.model_dump().items():
+        setattr(rule, field, value)
+    db.commit()
+    db.refresh(rule)
+    from app.alerts import alert_evaluator
+    alert_evaluator.invalidate(unit_id)
+    return {"status": "ok", "rule": _rule_dict(rule)}
+
+
+@router.delete("/{unit_id}/alerts/rules/{rule_id}")
+def delete_alert_rule(unit_id: str, rule_id: int, db: Session = Depends(get_db)):
+    rule = db.query(AlertRule).filter_by(id=rule_id, unit_id=unit_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Alert rule not found")
+    db.delete(rule)
+    db.commit()
+    from app.alerts import alert_evaluator
+    alert_evaluator.invalidate(unit_id)
+    return {"status": "ok", "deleted": rule_id}
+
+
+@router.get("/{unit_id}/alerts/events")
+def list_alert_events(unit_id: str, limit: int = 50, db: Session = Depends(get_db)):
+    events = (db.query(AlertEvent).filter_by(unit_id=unit_id)
+              .order_by(AlertEvent.onset_at.desc()).limit(limit).all())
+    return {"status": "ok", "events": [_event_dict(e) for e in events]}
+
+
+@router.post("/{unit_id}/alerts/events/{event_id}/ack")
+def ack_alert_event(unit_id: str, event_id: int, by: str | None = None, db: Session = Depends(get_db)):
+    evt = db.query(AlertEvent).filter_by(id=event_id, unit_id=unit_id).first()
+    if not evt:
+        raise HTTPException(status_code=404, detail="Alert event not found")
+    evt.acknowledged_at = datetime.utcnow()
+    evt.acknowledged_by = by
+    db.commit()
+    return {"status": "ok", "acknowledged": event_id}
 
 
 # ============================================================================
