@@ -128,3 +128,24 @@ class AlertEvent(Base):
     acknowledged_at = Column(DateTime, nullable=True)
     acknowledged_by = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
+
+
+class NL43Reading(Base):
+    """Downsampled time-series of live-monitor readings, for the live-chart
+    backfill (so a viewer sees recent trend on open, not a blank chart).
+
+    Viewing only — NOT the report source. Reports use the device's authoritative
+    FTP .rnd intervals. This is a short, capped trail (one row/minute, pruned to
+    a retention window) fed by the monitor's keepalive poll loop.
+    """
+
+    __tablename__ = "nl43_readings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    unit_id = Column(String, index=True, nullable=False)
+    timestamp = Column(DateTime, default=func.now(), index=True)
+    lp = Column(String, nullable=True)
+    leq = Column(String, nullable=True)
+    lmax = Column(String, nullable=True)
+    ln1 = Column(String, nullable=True)
+    ln2 = Column(String, nullable=True)

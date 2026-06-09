@@ -11,7 +11,7 @@ import os
 import asyncio
 
 from app.database import get_db
-from app.models import NL43Config, NL43Status, AlertRule, AlertEvent
+from app.models import NL43Config, NL43Status, AlertRule, AlertEvent, NL43Reading
 from app.services import NL43Client, persist_snapshot
 
 logger = logging.getLogger(__name__)
@@ -328,6 +328,31 @@ async def monitor_status():
     """Status of every device monitor (running, subscriber count, keep-alive)."""
     from app.monitor import monitor_manager
     return {"status": "ok", "monitors": monitor_manager.status()}
+
+
+@router.get("/{unit_id}/history")
+def get_monitor_history(unit_id: str, hours: float = 2.0, db: Session = Depends(get_db)):
+    """Recent downsampled monitor readings (the DOD trail) for the live-chart
+    backfill. Viewing only — NOT the FTP report data."""
+    from datetime import timedelta
+    hours = max(0.1, min(hours, 48.0))
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    rows = (db.query(NL43Reading)
+            .filter(NL43Reading.unit_id == unit_id, NL43Reading.timestamp >= cutoff)
+            .order_by(NL43Reading.timestamp.asc()).all())
+    return {
+        "status": "ok",
+        "unit_id": unit_id,
+        "hours": hours,
+        "count": len(rows),
+        "readings": [
+            {
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "lp": r.lp, "leq": r.leq, "lmax": r.lmax, "ln1": r.ln1, "ln2": r.ln2,
+            }
+            for r in rows
+        ],
+    }
 
 
 # ============================================================================

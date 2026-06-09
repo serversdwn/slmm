@@ -36,6 +36,12 @@ MONITOR_POLL_INTERVAL = float(os.getenv("MONITOR_POLL_INTERVAL", "0.25"))
 # per-update latency (~2.5s -> ~1.3s).
 MONITOR_STATE_REFRESH_S = float(os.getenv("MONITOR_STATE_REFRESH_S", "30"))
 
+# Downsampled trail for the live-chart backfill: store one reading per
+# TRAIL_SAMPLE_S and keep TRAIL_RETENTION_HOURS of it (pruned). Viewing only —
+# reports use the device's FTP .rnd data, not this.
+TRAIL_SAMPLE_S = float(os.getenv("MONITOR_TRAIL_SAMPLE_S", "60"))
+TRAIL_RETENTION_HOURS = float(os.getenv("MONITOR_TRAIL_RETENTION_HOURS", "24"))
+
 # If nothing has been broadcast in this many seconds (e.g. device offline and
 # silent), send a keepalive frame so reverse proxies don't drop the idle WS.
 MONITOR_HEARTBEAT_S = float(os.getenv("MONITOR_HEARTBEAT_S", "25"))
@@ -77,6 +83,7 @@ class DeviceMonitor:
         self._reachable = True  # last broadcast reachability (for transition frames)
         self._cached_state: Optional[str] = None  # run state, refreshed periodically
         self._last_state_refresh = 0.0
+        self._last_trail_store = 0.0  # downsample throttle for the backfill trail
 
     @property
     def running(self) -> bool:
@@ -190,6 +197,10 @@ class DeviceMonitor:
             snap.unit_id = self.unit_id
             persist_snapshot(snap, db)
             db.commit()
+            # Append to the downsampled backfill trail (~one row per TRAIL_SAMPLE_S).
+            if now - self._last_trail_store >= TRAIL_SAMPLE_S:
+                self._last_trail_store = now
+                self._store_trail(snap, db)
             status = db.query(NL43Status).filter_by(unit_id=self.unit_id).first()
             mst = (status.measurement_start_time.isoformat()
                    if status and status.measurement_start_time else None)
@@ -199,6 +210,24 @@ class DeviceMonitor:
             return None, None
         finally:
             db.close()
+
+    def _store_trail(self, snap, db) -> None:
+        """Append one downsampled reading to the backfill trail and prune old rows."""
+        from datetime import datetime, timedelta
+        from app.models import NL43Reading
+        try:
+            db.add(NL43Reading(
+                unit_id=self.unit_id, timestamp=datetime.utcnow(),
+                lp=snap.lp, leq=snap.leq, lmax=snap.lmax, ln1=snap.ln1, ln2=snap.ln2,
+            ))
+            cutoff = datetime.utcnow() - timedelta(hours=TRAIL_RETENTION_HOURS)
+            db.query(NL43Reading).filter(
+                NL43Reading.unit_id == self.unit_id,
+                NL43Reading.timestamp < cutoff,
+            ).delete()
+            db.commit()
+        except Exception as e:
+            logger.warning(f"[MONITOR] {self.unit_id}: trail store failed: {e}")
 
     def _broadcast(self, payload: dict, cache: bool = True) -> None:
         if cache:
