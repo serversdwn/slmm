@@ -178,9 +178,18 @@ class BackgroundPoller:
             now = datetime.utcnow()
             polled_count = 0
 
+            from app.monitor import monitor_manager
+
             for cfg in configs:
                 if not self._running:
                     break
+
+                # Skip units with an active live monitor: it polls them at ~1Hz and
+                # keeps the status cache fresh, so a redundant background poll would just
+                # add load/lock-contention on the device's single connection.
+                if monitor_manager.is_active(cfg.unit_id):
+                    self._logger.debug(f"Skipping {cfg.unit_id} — live monitor active")
+                    continue
 
                 # Get current status
                 status = db.query(NL43Status).filter_by(unit_id=cfg.unit_id).first()
