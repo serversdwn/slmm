@@ -46,6 +46,8 @@ class NL43Snapshot:
     lmax: Optional[str] = None  # Maximum level
     lmin: Optional[str] = None  # Minimum level
     lpeak: Optional[str] = None  # Peak level
+    ln1: Optional[str] = None  # Percentile slot LN1 (configurable; device default L5, contract L1)
+    ln2: Optional[str] = None  # Percentile slot LN2 (configurable; device default L10)
     battery_level: Optional[str] = None
     power_source: Optional[str] = None
     sd_remaining_mb: Optional[str] = None
@@ -69,10 +71,27 @@ def persist_snapshot(s: NL43Snapshot, db: Session):
 
         logger.info(f"State transition check for {s.unit_id}: '{previous_state}' -> '{new_state}'")
 
-        # Device returns "Start" when measuring, "Stop" when stopped
-        # Normalize to previous behavior for backward compatibility
-        is_measuring = new_state == "Start"
-        was_measuring = previous_state == "Start"
+        # The device reports "Start" while measuring; the DOD path uses that string,
+        # but the DRD stream path tags snapshots "Measure" (and the DOD fallback also
+        # uses "Measure"). Treat ALL of these as "measuring" — otherwise opening and
+        # closing the live stream flips state "Start"->"Measure"->"Start", which the
+        # old equality check misread as stop-then-start and reset measurement_start_time.
+        #
+        # Also: only act on RECOGNIZED states. A buffer desync on the shared connection
+        # (e.g. right after a DRD/DOD test) can make a Measure? read return a stray,
+        # garbled value; treating that as "not measuring" produced constant phantom
+        # "STOPPED -> STARTED" log pairs and reset the timer. Ignore unknown reads.
+        MEASURING_STATES = {"Start", "Measure"}
+        STOPPED_STATES = {"Stop"}
+        was_measuring = previous_state in MEASURING_STATES
+
+        if new_state in MEASURING_STATES:
+            is_measuring = True
+        elif new_state in STOPPED_STATES:
+            is_measuring = False
+        else:
+            logger.warning(f"Ignoring unrecognized measurement state for {s.unit_id}: {new_state!r}")
+            is_measuring = was_measuring  # garbled/unknown read — no transition
 
         if not was_measuring and is_measuring:
             # Measurement just started - record the start time
@@ -95,13 +114,18 @@ def persist_snapshot(s: NL43Snapshot, db: Session):
             except Exception:
                 pass
 
-        row.measurement_state = new_state
+        # Only persist a recognized state so one garbled read can't poison the next
+        # transition check (which would manufacture the phantom STOPPED/STARTED pair).
+        if new_state in MEASURING_STATES or new_state in STOPPED_STATES:
+            row.measurement_state = new_state
         row.counter = s.counter
         row.lp = s.lp
         row.leq = s.leq
         row.lmax = s.lmax
         row.lmin = s.lmin
         row.lpeak = s.lpeak
+        row.ln1 = s.ln1
+        row.ln2 = s.ln2
         row.battery_level = s.battery_level
         row.power_source = s.power_source
         row.sd_remaining_mb = s.sd_remaining_mb
@@ -691,22 +715,29 @@ class NL43Client:
 
         snap = NL43Snapshot(unit_id="", raw_payload=resp, measurement_state=measurement_state)
 
-        # Parse known positions (based on NL43 communication guide - DRD format)
-        # DRD format: d0=counter, d1=Lp, d2=Leq, d3=Lmax, d4=Lmin, d5=Lpeak, d6=LIeq, ...
+        # Parse DOD positional fields. DOD's layout is DIFFERENT from DRD: it has NO
+        # leading counter and it includes LE plus LN1–LN5. The device returns 4 channels
+        # of 16 fields each — [Lp, Leq, LE, Lmax, Lmin, LN1, LN2, LN3, LN4, LN5, Lpeak,
+        # LIeq, Leq_mov, Ltm5, over, under] — and channel 1 (parts[0:16]) is the main
+        # display. The previous code reused the DRD map (treating parts[0] as a counter),
+        # which shifted everything: Lp was reported as the counter, Leq as Lp, LE as Leq,
+        # and LN1 as Lpeak (you could spot it because "Lpeak" came out < Lmax).
         try:
-            # Capture d0 (counter) for timer synchronization
             if len(parts) >= 1:
-                snap.counter = parts[0]  # d0: Measurement interval counter (1-600)
+                snap.lp = parts[0]      # Lp: instantaneous sound pressure level
             if len(parts) >= 2:
-                snap.lp = parts[1]     # d1: Instantaneous sound pressure level
-            if len(parts) >= 3:
-                snap.leq = parts[2]    # d2: Equivalent continuous sound level
+                snap.leq = parts[1]     # Leq: equivalent continuous level
+            # parts[2] = LE (sound exposure level) — not currently surfaced
             if len(parts) >= 4:
-                snap.lmax = parts[3]   # d3: Maximum level
+                snap.lmax = parts[3]    # Lmax
             if len(parts) >= 5:
-                snap.lmin = parts[4]   # d4: Minimum level
+                snap.lmin = parts[4]    # Lmin
+            if len(parts) >= 11:
+                snap.lpeak = parts[10]  # Lpeak  (parts[5] is LN1, NOT Lpeak)
             if len(parts) >= 6:
-                snap.lpeak = parts[5]  # d5: Peak level
+                snap.ln1 = parts[5]     # LN1 percentile slot (device default L5; contract L1)
+            if len(parts) >= 7:
+                snap.ln2 = parts[6]     # LN2 percentile slot (device default L10)
         except (IndexError, ValueError) as e:
             logger.warning(f"Error parsing DOD data points: {e}")
 
