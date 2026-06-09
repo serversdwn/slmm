@@ -63,6 +63,9 @@ class DeviceMonitor:
         self._keepalive = False
         self._task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
+        self._last_payload: Optional[dict] = None  # replayed to new subscribers
+        self._consec_fail = 0
+        self._reachable = True  # last broadcast reachability (for transition frames)
 
     @property
     def running(self) -> bool:
@@ -82,6 +85,13 @@ class DeviceMonitor:
         q: asyncio.Queue = asyncio.Queue(maxsize=5)
         async with self._lock:
             self._subscribers.add(q)
+            # Replay the last frame so a client connecting mid-stream sees data
+            # (or the current 'unreachable' state) immediately, not after a poll.
+            if self._last_payload is not None:
+                try:
+                    q.put_nowait(self._last_payload)
+                except asyncio.QueueFull:
+                    pass
             self._ensure_task()
         return q
 
@@ -101,12 +111,26 @@ class DeviceMonitor:
             while self._has_demand():
                 snap, mst = await self._poll_once()
                 if snap is not None:
+                    self._consec_fail = 0
+                    self._reachable = True
                     payload = _snapshot_payload(snap, self.unit_id, mst)
+                    payload["feed_status"] = "ok"
                     self._broadcast(payload)
                     try:
                         await alert_evaluator.evaluate(self.unit_id, snap)
                     except Exception as e:
                         logger.warning(f"[MONITOR] {self.unit_id}: alert eval failed: {e}")
+                else:
+                    # Tell clients the device went offline — once, on transition, after a
+                    # few failures so a momentary blip doesn't flap the UI.
+                    self._consec_fail += 1
+                    if self._reachable and self._consec_fail >= 3:
+                        self._reachable = False
+                        self._broadcast({
+                            "unit_id": self.unit_id,
+                            "timestamp": datetime.utcnow().isoformat(),
+                            "feed_status": "unreachable",
+                        })
                 await asyncio.sleep(MONITOR_POLL_INTERVAL)
         finally:
             logger.info(f"[MONITOR] {self.unit_id}: feed stopped")
@@ -138,6 +162,7 @@ class DeviceMonitor:
             db.close()
 
     def _broadcast(self, payload: dict) -> None:
+        self._last_payload = payload  # cache for replay to new subscribers
         for q in list(self._subscribers):
             try:
                 q.put_nowait(payload)
