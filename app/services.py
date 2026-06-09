@@ -680,10 +680,12 @@ class NL43Client:
         else:
             raise ValueError(f"Unknown result code: {result_code}")
 
-    async def request_dod(self) -> NL43Snapshot:
+    async def request_dod(self, measurement_state: Optional[str] = None) -> NL43Snapshot:
         """Request DOD (Data Output Display) snapshot from device.
 
-        Returns parsed measurement data from the device display.
+        Returns parsed measurement data from the device display. Pass
+        measurement_state to reuse a cached run state and skip the extra Measure?
+        round-trip (the state changes rarely); leave it None to query it.
         """
         # _send_command now handles result code validation and returns the data line
         resp = await self._send_command("DOD?\r\n")
@@ -706,12 +708,15 @@ class NL43Client:
 
         logger.info(f"Parsed {len(parts)} data points from DOD response")
 
-        # Query actual measurement state (DOD doesn't include this information)
-        try:
-            measurement_state = await self.get_measurement_state()
-        except Exception as e:
-            logger.warning(f"Failed to get measurement state, defaulting to 'Measure': {e}")
-            measurement_state = "Measure"
+        # DOD doesn't include the run state. Query it only when not supplied by the
+        # caller — the monitor passes a cached state most cycles and refreshes it
+        # occasionally, avoiding a second rate-limited command on every poll.
+        if measurement_state is None:
+            try:
+                measurement_state = await self.get_measurement_state()
+            except Exception as e:
+                logger.warning(f"Failed to get measurement state, defaulting to 'Measure': {e}")
+                measurement_state = "Measure"
 
         snap = NL43Snapshot(unit_id="", raw_payload=resp, measurement_state=measurement_state)
 

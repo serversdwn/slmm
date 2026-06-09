@@ -27,9 +27,14 @@ from app.alerts import alert_evaluator
 
 logger = logging.getLogger(__name__)
 
-# Sleep between DOD polls. Note the 1s device rate-limit (and DOD?+Measure? per
-# poll) already paces the effective rate to a few seconds; this is the extra idle.
-MONITOR_POLL_INTERVAL = float(os.getenv("MONITOR_POLL_INTERVAL", "1.0"))
+# Extra idle between DOD polls. The 1s device rate-limit already paces consecutive
+# DOD? commands, so this just needs to be small — the rate-limit is the real floor.
+MONITOR_POLL_INTERVAL = float(os.getenv("MONITOR_POLL_INTERVAL", "0.25"))
+
+# How often to refresh the run state (Measure?). It changes rarely, so we cache it
+# and skip that second rate-limited command on most polls — roughly halving the
+# per-update latency (~2.5s -> ~1.3s).
+MONITOR_STATE_REFRESH_S = float(os.getenv("MONITOR_STATE_REFRESH_S", "30"))
 
 # If nothing has been broadcast in this many seconds (e.g. device offline and
 # silent), send a keepalive frame so reverse proxies don't drop the idle WS.
@@ -70,6 +75,8 @@ class DeviceMonitor:
         self._last_payload: Optional[dict] = None  # replayed to new subscribers
         self._consec_fail = 0
         self._reachable = True  # last broadcast reachability (for transition frames)
+        self._cached_state: Optional[str] = None  # run state, refreshed periodically
+        self._last_state_refresh = 0.0
 
     @property
     def running(self) -> bool:
@@ -168,7 +175,18 @@ class DeviceMonitor:
                 ftp_username=cfg.ftp_username, ftp_password=cfg.ftp_password,
                 ftp_port=cfg.ftp_port or 21,
             )
-            snap = await client.request_dod()
+            # Refresh the run state only every MONITOR_STATE_REFRESH_S; reuse the
+            # cached state otherwise so most polls send just DOD? (one rate-limited
+            # command) instead of DOD? + Measure?.
+            now = asyncio.get_running_loop().time()
+            refresh_state = (self._cached_state is None
+                             or now - self._last_state_refresh >= MONITOR_STATE_REFRESH_S)
+            snap = await client.request_dod(
+                measurement_state=None if refresh_state else self._cached_state
+            )
+            if refresh_state:
+                self._cached_state = snap.measurement_state
+                self._last_state_refresh = now
             snap.unit_id = self.unit_id
             persist_snapshot(snap, db)
             db.commit()
