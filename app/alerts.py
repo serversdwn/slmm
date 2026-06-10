@@ -112,6 +112,7 @@ class AlertEvaluator:
     def __init__(self):
         self._states: Dict[Tuple[str, int], RuleState] = {}
         self._rule_cache: Dict[str, Tuple[float, list]] = {}  # unit_id -> (fetched_at, rules)
+        self._offline_events: Dict[str, int] = {}  # unit_id -> open connectivity AlertEvent id
         logger.info("[ALERT] rule-based evaluator ready")
 
     async def evaluate(self, unit_id: str, snap) -> None:
@@ -235,9 +236,71 @@ class AlertEvaluator:
             f"recovered to {value:.1f} dB (peak {peak:.1f} dB)",
         )
 
+    # -- connectivity (device offline/online) -------------------------------
+    #
+    # Raised by the live monitor when it loses / regains contact with a device.
+    # Persisted as an AlertEvent (sentinel rule_id=0, metric="connectivity") so it
+    # lands in the same events/inbox/ack pipeline as threshold alerts. The in-memory
+    # map dedupes; the DB query also dedupes across a process restart.
+
+    async def device_offline(self, unit_id: str) -> None:
+        if unit_id in self._offline_events:
+            return  # already flagged offline
+        from app.database import SessionLocal
+        from app.models import AlertEvent
+        db = SessionLocal()
+        try:
+            existing = db.query(AlertEvent).filter_by(
+                unit_id=unit_id, metric="connectivity", status="active").first()
+            if existing:  # already open in the DB (e.g. carried across a restart)
+                self._offline_events[unit_id] = existing.id
+                return
+            evt = AlertEvent(
+                rule_id=0, unit_id=unit_id, rule_name="Device unreachable",
+                metric="connectivity", threshold_db=0.0, status="active",
+            )
+            db.add(evt)
+            db.commit()
+            db.refresh(evt)
+            self._offline_events[unit_id] = evt.id
+        except Exception as e:
+            logger.warning(f"[ALERT] failed to record offline for {unit_id}: {e}")
+        finally:
+            db.close()
+        await self._dispatch_raw("OFFLINE", unit_id, "Device unreachable",
+                                 "live monitor lost contact with the device")
+
+    async def device_online(self, unit_id: str) -> None:
+        self._offline_events.pop(unit_id, None)
+        from app.database import SessionLocal
+        from app.models import AlertEvent
+        db = SessionLocal()
+        cleared = 0
+        try:
+            opened = db.query(AlertEvent).filter_by(
+                unit_id=unit_id, metric="connectivity", status="active").all()
+            for evt in opened:
+                evt.clear_at = datetime.utcnow()
+                evt.status = "cleared"
+                cleared += 1
+            if cleared:
+                db.commit()
+        except Exception as e:
+            logger.warning(f"[ALERT] failed to record online for {unit_id}: {e}")
+        finally:
+            db.close()
+        if cleared:  # only announce recovery if it was actually flagged offline
+            await self._dispatch_raw("ONLINE", unit_id, "Device recovered",
+                                     "live monitor regained contact with the device")
+
+    # -- event persistence + dispatch ---------------------------------------
+
     async def _dispatch(self, kind: str, unit_id: str, rule, detail: str) -> None:
+        await self._dispatch_raw(kind, unit_id, rule.name, detail)
+
+    async def _dispatch_raw(self, kind: str, unit_id: str, name: str, detail: str) -> None:
         """POC dispatch: server log. Swap in a Terra-View webhook (email/SMS) here."""
-        logger.warning(f"[ALERT:{kind}] {unit_id} '{rule.name}': {detail}")
+        logger.warning(f"[ALERT:{kind}] {unit_id} '{name}': {detail}")
 
 
 # Module-level singleton (the monitor calls alert_evaluator.evaluate per snapshot)

@@ -27,9 +27,26 @@ from app.alerts import alert_evaluator
 
 logger = logging.getLogger(__name__)
 
-# Extra idle between DOD polls. The 1s device rate-limit already paces consecutive
-# DOD? commands, so this just needs to be small — the rate-limit is the real floor.
+# Extra idle between DOD polls WHEN A BROWSER IS WATCHING. The 1s device rate-limit
+# already paces consecutive DOD? commands, so this just needs to be small — the
+# rate-limit is the real floor (~1.25s/poll effective).
 MONITOR_POLL_INTERVAL = float(os.getenv("MONITOR_POLL_INTERVAL", "0.25"))
+
+# Idle cadence when NO browser is subscribed and the feed is only kept alive for
+# alerting. Same data, ~8x fewer polls -> ~8x less cellular traffic on a metered
+# SIM (~1 GB/device/month at full rate -> ~125 MB). NOTE: this also sets the alert
+# sampling resolution when nobody is watching, so keep it <= the smallest alert
+# duration_s you rely on (default 10s comfortably catches a "sustained 30/60s" rule).
+MONITOR_IDLE_POLL_INTERVAL = float(os.getenv("MONITOR_IDLE_POLL_INTERVAL", "10"))
+
+# Exponential backoff once the device is unreachable, so a powered-off / asleep /
+# out-of-signal device stops churning reconnects every cycle (log spam + a trickle
+# of wasted cellular data on failed SYNs). delay = min(BASE * 2**(fails-1), MAX),
+# reset to full-rate on the first good poll. While a browser is actively watching we
+# cap the backoff lower (WATCHED_MAX) so a recovery surfaces quickly for the viewer.
+MONITOR_BACKOFF_BASE_S = float(os.getenv("MONITOR_BACKOFF_BASE_S", "1"))
+MONITOR_BACKOFF_MAX_S = float(os.getenv("MONITOR_BACKOFF_MAX_S", "60"))
+MONITOR_BACKOFF_WATCHED_MAX_S = float(os.getenv("MONITOR_BACKOFF_WATCHED_MAX_S", "5"))
 
 # How often to refresh the run state (Measure?). It changes rarely, so we cache it
 # and skip that second rate-limited command on most polls — roughly halving the
@@ -131,6 +148,12 @@ class DeviceMonitor:
             while self._has_demand():
                 snap, mst = await self._poll_once()
                 if snap is not None:
+                    if not self._reachable:
+                        # Recovered from an outage — clear the connectivity alert.
+                        try:
+                            await alert_evaluator.device_online(self.unit_id)
+                        except Exception as e:
+                            logger.warning(f"[MONITOR] {self.unit_id}: online alert failed: {e}")
                     self._consec_fail = 0
                     self._reachable = True
                     payload = _snapshot_payload(snap, self.unit_id, mst)
@@ -143,7 +166,8 @@ class DeviceMonitor:
                         logger.warning(f"[MONITOR] {self.unit_id}: alert eval failed: {e}")
                 else:
                     # Tell clients the device went offline — once, on transition, after a
-                    # few failures so a momentary blip doesn't flap the UI.
+                    # few failures so a momentary blip doesn't flap the UI. Same edge
+                    # raises the device-offline alert.
                     self._consec_fail += 1
                     if self._reachable and self._consec_fail >= 3:
                         self._reachable = False
@@ -153,6 +177,10 @@ class DeviceMonitor:
                             "feed_status": "unreachable",
                         })
                         last_send = loop.time()
+                        try:
+                            await alert_evaluator.device_offline(self.unit_id)
+                        except Exception as e:
+                            logger.warning(f"[MONITOR] {self.unit_id}: offline alert failed: {e}")
 
                 # Heartbeat: during quiet/offline stretches, send a keepalive so an
                 # idle WS isn't dropped by a reverse proxy. Not cached (new subscribers
@@ -166,9 +194,22 @@ class DeviceMonitor:
                     }, cache=False)
                     last_send = loop.time()
 
-                await asyncio.sleep(MONITOR_POLL_INTERVAL)
+                await asyncio.sleep(self._next_delay())
         finally:
             logger.info(f"[MONITOR] {self.unit_id}: feed stopped")
+
+    def _next_delay(self) -> float:
+        """Inter-poll delay: exponential backoff while unreachable, full-rate while a
+        browser is watching, relaxed cadence when the feed is keepalive-only."""
+        if self._consec_fail > 0:
+            shift = min(self._consec_fail - 1, 6)  # cap growth at 2**6 = 64x base
+            delay = min(MONITOR_BACKOFF_BASE_S * (2 ** shift), MONITOR_BACKOFF_MAX_S)
+            if self._subscribers:
+                delay = min(delay, MONITOR_BACKOFF_WATCHED_MAX_S)
+            return delay
+        if self._subscribers:
+            return MONITOR_POLL_INTERVAL       # a browser is watching — smooth chart
+        return MONITOR_IDLE_POLL_INTERVAL      # keepalive-only (alerting) — save data
 
     async def _poll_once(self):
         """One DOD poll: read, persist, return (snapshot, measurement_start_iso)."""
@@ -267,6 +308,11 @@ class MonitorManager:
                 "running": m.running,
                 "subscribers": m.subscriber_count(),
                 "keepalive": m._keepalive,
+                "reachable": m._reachable,
+                # what cadence the loop is currently using, for observability
+                "mode": ("backoff" if m._consec_fail > 0
+                         else "watched" if m._subscribers
+                         else "idle"),
             }
             for uid, m in self._monitors.items()
         }
