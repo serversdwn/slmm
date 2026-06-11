@@ -428,6 +428,19 @@ async def _sync_keepalive_to_rules(unit_id: str, db: Session):
     await m.set_keepalive(True)
 
 
+def _reset_rule_runtime(unit_id: str, rule_id: int, db: Session):
+    """After a rule edit/delete: drop its evaluator state machine and close any open
+    event, so a stale 'active' phase doesn't mis-evaluate against the new config and
+    the client portal doesn't stay 'in alarm' on a rule that changed or is gone."""
+    from app.alerts import alert_evaluator
+    alert_evaluator.forget_rule(unit_id, rule_id)
+    now = datetime.utcnow()
+    for evt in db.query(AlertEvent).filter_by(unit_id=unit_id, rule_id=rule_id, status="active").all():
+        evt.clear_at = now
+        evt.status = "cleared"
+    db.commit()
+
+
 @router.post("/{unit_id}/alerts/rules")
 async def create_alert_rule(unit_id: str, payload: AlertRulePayload, db: Session = Depends(get_db)):
     rule = AlertRule(unit_id=unit_id, **payload.model_dump())
@@ -457,6 +470,7 @@ async def update_alert_rule(unit_id: str, rule_id: int, payload: AlertRulePayloa
     db.refresh(rule)
     from app.alerts import alert_evaluator
     alert_evaluator.invalidate(unit_id)
+    _reset_rule_runtime(unit_id, rule_id, db)
     await _sync_keepalive_to_rules(unit_id, db)
     return {"status": "ok", "rule": _rule_dict(rule)}
 
@@ -470,6 +484,7 @@ async def delete_alert_rule(unit_id: str, rule_id: int, db: Session = Depends(ge
     db.commit()
     from app.alerts import alert_evaluator
     alert_evaluator.invalidate(unit_id)
+    _reset_rule_runtime(unit_id, rule_id, db)   # close its open event so the portal doesn't stay red
     await _sync_keepalive_to_rules(unit_id, db)  # no-op if no enabled rules remain
     return {"status": "ok", "deleted": rule_id}
 

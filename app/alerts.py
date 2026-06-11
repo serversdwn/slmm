@@ -175,6 +175,12 @@ class AlertEvaluator:
         else:
             self._rule_cache.pop(unit_id, None)
 
+    def forget_rule(self, unit_id: str, rule_id: int) -> None:
+        """Drop a rule's per-(unit, rule) state machine after the rule is edited or
+        deleted, so a stale 'active' phase / open event_id from the old config
+        doesn't bleed into the new one (mis-firing a clear or suppressing an onset)."""
+        self._states.pop((unit_id, rule_id), None)
+
     # -- scheduling ----------------------------------------------------------
 
     def _in_schedule(self, rule) -> bool:
