@@ -40,6 +40,7 @@ class RuleState:
     edge_since: Optional[float] = None  # when the current edge condition began (clock time)
     peak: float = 0.0
     event_id: Optional[int] = None      # the open AlertEvent row (for the clear update)
+    last_onset: Optional[float] = None  # time of the last onset (for cooldown)
 
 
 def _exceeds(value: float, rule) -> bool:
@@ -68,9 +69,17 @@ def _evaluate_step(state: RuleState, value: float, now: float, rule) -> Optional
             if state.edge_since is None:
                 state.edge_since = now
             if now - state.edge_since >= duration:
+                # Cooldown: suppress a new onset within cooldown_s of the last one
+                # (stops a repeatedly-breaching signal from flooding the history).
+                # Hold edge_since so it fires the moment cooldown lapses if still
+                # breaching — don't reset it here.
+                cooldown = getattr(rule, "cooldown_s", 0) or 0
+                if state.last_onset is not None and (now - state.last_onset) < cooldown:
+                    return None
                 state.phase = "active"
                 state.edge_since = None
                 state.peak = value
+                state.last_onset = now
                 return "onset"
         else:
             state.edge_since = None
