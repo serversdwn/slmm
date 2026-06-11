@@ -284,11 +284,21 @@ async def monitor_stream(websocket: WebSocket, unit_id: str):
                 payload = await asyncio.wait_for(queue.get(), timeout=1.0)
             except asyncio.TimeoutError:
                 continue  # re-check gone.done()
+            if gone.done():
+                break  # client disconnected while we waited — don't send into a closing socket
             await websocket.send_json(payload)
     except WebSocketDisconnect:
         logger.info(f"Monitor subscriber disconnected for {unit_id}")
     except Exception as e:
-        logger.warning(f"Monitor stream error for {unit_id}: {e}")
+        # A frame that races the close (client vanished mid-send) surfaces as
+        # "Unexpected ASGI message 'websocket.send' after ... websocket.close".
+        # That's expected on disconnect (the portal closes the socket on every tab
+        # switch), not an error — log it quietly.
+        msg = str(e)
+        if "after sending" in msg or "websocket.close" in msg or "response already completed" in msg:
+            logger.debug(f"Monitor stream for {unit_id} closed mid-send (client gone)")
+        else:
+            logger.warning(f"Monitor stream error for {unit_id}: {e}")
     finally:
         gone.cancel()
         await monitor.unsubscribe(queue)
