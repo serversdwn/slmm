@@ -409,14 +409,34 @@ def _event_dict(e: AlertEvent) -> dict:
     }
 
 
+async def _sync_keepalive_to_rules(unit_id: str, db: Session):
+    """Keep a unit's monitor running while it has enabled alert rules, so the
+    evaluator runs 24/7 even with no browser watching. Turns keepalive ON (and
+    persists monitor_enabled so it survives a restart via the boot auto-start)
+    when enabled rules exist; never turns it OFF — a device may be kept alive for
+    other reasons, so operators control that on /admin/slmm."""
+    has_enabled = (db.query(AlertRule)
+                   .filter_by(unit_id=unit_id, enabled=True).first() is not None)
+    if not has_enabled:
+        return
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if cfg and not cfg.monitor_enabled:
+        cfg.monitor_enabled = True
+        db.commit()
+    from app.monitor import monitor_manager
+    m = await monitor_manager.get(unit_id)
+    await m.set_keepalive(True)
+
+
 @router.post("/{unit_id}/alerts/rules")
-def create_alert_rule(unit_id: str, payload: AlertRulePayload, db: Session = Depends(get_db)):
+async def create_alert_rule(unit_id: str, payload: AlertRulePayload, db: Session = Depends(get_db)):
     rule = AlertRule(unit_id=unit_id, **payload.model_dump())
     db.add(rule)
     db.commit()
     db.refresh(rule)
     from app.alerts import alert_evaluator
     alert_evaluator.invalidate(unit_id)
+    await _sync_keepalive_to_rules(unit_id, db)
     return {"status": "ok", "rule": _rule_dict(rule)}
 
 
@@ -427,7 +447,7 @@ def list_alert_rules(unit_id: str, db: Session = Depends(get_db)):
 
 
 @router.put("/{unit_id}/alerts/rules/{rule_id}")
-def update_alert_rule(unit_id: str, rule_id: int, payload: AlertRulePayload, db: Session = Depends(get_db)):
+async def update_alert_rule(unit_id: str, rule_id: int, payload: AlertRulePayload, db: Session = Depends(get_db)):
     rule = db.query(AlertRule).filter_by(id=rule_id, unit_id=unit_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Alert rule not found")
@@ -437,11 +457,12 @@ def update_alert_rule(unit_id: str, rule_id: int, payload: AlertRulePayload, db:
     db.refresh(rule)
     from app.alerts import alert_evaluator
     alert_evaluator.invalidate(unit_id)
+    await _sync_keepalive_to_rules(unit_id, db)
     return {"status": "ok", "rule": _rule_dict(rule)}
 
 
 @router.delete("/{unit_id}/alerts/rules/{rule_id}")
-def delete_alert_rule(unit_id: str, rule_id: int, db: Session = Depends(get_db)):
+async def delete_alert_rule(unit_id: str, rule_id: int, db: Session = Depends(get_db)):
     rule = db.query(AlertRule).filter_by(id=rule_id, unit_id=unit_id).first()
     if not rule:
         raise HTTPException(status_code=404, detail="Alert rule not found")
@@ -449,6 +470,7 @@ def delete_alert_rule(unit_id: str, rule_id: int, db: Session = Depends(get_db))
     db.commit()
     from app.alerts import alert_evaluator
     alert_evaluator.invalidate(unit_id)
+    await _sync_keepalive_to_rules(unit_id, db)  # no-op if no enabled rules remain
     return {"status": "ok", "deleted": rule_id}
 
 
