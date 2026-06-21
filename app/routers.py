@@ -939,7 +939,7 @@ async def start_measurement(unit_id: str, db: Session = Depends(get_db)):
             db.expire_all()
             status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
             logger.info(f"State check: measurement_state={status.measurement_state if status else 'None'}, start_time={status.measurement_start_time if status else 'None'}")
-            if status and status.measurement_state == "Measure" and status.measurement_start_time:
+            if status and status.measurement_state in ("Start", "Measure") and status.measurement_start_time:
                 logger.info(f"✓ Measurement state confirmed for {unit_id} with start time {status.measurement_start_time}")
                 break
 
