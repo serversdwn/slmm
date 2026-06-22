@@ -11,7 +11,7 @@ import os
 import asyncio
 
 from app.database import get_db
-from app.models import NL43Config, NL43Status
+from app.models import NL43Config, NL43Status, AlertRule, AlertEvent, NL43Reading
 from app.services import NL43Client, persist_snapshot
 
 logger = logging.getLogger(__name__)
@@ -121,6 +121,392 @@ async def flush_connection_pool():
     return {"status": "ok", "message": "All cached connections closed"}
 
 
+@router.post("/{unit_id}/disconnect")
+async def disconnect_device(unit_id: str, db: Session = Depends(get_db)):
+    """Cleanly close SLMM's persistent TCP connection to a single device.
+
+    Gracefully closes (TCP FIN + wait_closed) the pooled connection for this
+    device and removes it from the pool, freeing the NL43's single connection
+    slot. Idempotent — a no-op if no connection is currently cached.
+
+    Note: this releases the *idle* pooled connection. It does not interrupt an
+    in-progress DRD stream or an in-flight command (those have the socket
+    checked out of the pool) — close the stream WebSocket to end a live stream.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    from app.services import _connection_pool
+
+    device_key = f"{cfg.host}:{cfg.tcp_port}"
+    had_conn = device_key in _connection_pool.get_stats().get("connections", {})
+
+    await _connection_pool.discard(device_key)
+
+    return {
+        "status": "ok",
+        "unit_id": unit_id,
+        "device_key": device_key,
+        "disconnected": had_conn,
+        "message": "Connection closed" if had_conn else "No cached connection to close",
+    }
+
+
+@router.post("/{unit_id}/deactivate")
+async def deactivate_device(unit_id: str, db: Session = Depends(get_db)):
+    """Make a single unit dormant: stop background polling for it AND drop its
+    connection, freeing the device's connection slot. poll_enabled=False is
+    persisted, so the unit stays dormant across restarts until /activate.
+    """
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    cfg.poll_enabled = False
+    db.commit()
+
+    from app.services import _connection_pool, _get_device_lock
+
+    device_key = f"{cfg.host}:{cfg.tcp_port}"
+
+    # Wait briefly for any in-flight poll/command to finish (so its connection is
+    # back in the pool), then drop it. If a long-lived stream holds the lock we
+    # don't block forever — discard the pooled connection regardless.
+    lock = await _get_device_lock(device_key)
+    acquired = False
+    try:
+        await asyncio.wait_for(lock.acquire(), timeout=10.0)
+        acquired = True
+    except asyncio.TimeoutError:
+        acquired = False
+    try:
+        await _connection_pool.discard(device_key)
+    finally:
+        if acquired:
+            lock.release()
+
+    return {
+        "status": "ok",
+        "unit_id": unit_id,
+        "poll_enabled": False,
+        "message": "Polling disabled and connection closed for this unit",
+    }
+
+
+@router.post("/{unit_id}/activate")
+async def activate_device(unit_id: str, db: Session = Depends(get_db)):
+    """Resume background polling for a unit previously deactivated."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="NL43 config not found")
+
+    cfg.poll_enabled = True
+    db.commit()
+
+    return {
+        "status": "ok",
+        "unit_id": unit_id,
+        "poll_enabled": True,
+        "message": "Polling enabled for this unit",
+    }
+
+
+@router.get("/_system/status")
+async def system_status():
+    """Report whether this SLMM instance is actively polling or in standby."""
+    from app.background_poller import poller
+    from app.services import _connection_pool
+    return {
+        "status": "ok",
+        "mode": "active" if poller.is_active() else "standby",
+        "polling_active": poller.is_active(),
+        "active_connections": _connection_pool.get_stats().get("active_connections", 0),
+    }
+
+
+@router.post("/_system/standby")
+async def system_standby():
+    """Put this SLMM instance into standby: stop polling ALL devices and release
+    every connection, so it stops occupying device slots (e.g. so a prod instance
+    can take over). Runtime-only — on restart the instance returns to its
+    SLMM_POLLING_ENABLED default.
+    """
+    from app.background_poller import poller
+    await poller.set_active(False)
+    return {"status": "ok", "mode": "standby",
+            "message": "Polling stopped and all device connections released"}
+
+
+@router.post("/_system/resume")
+async def system_resume():
+    """Resume polling after standby (global)."""
+    from app.background_poller import poller
+    await poller.set_active(True)
+    return {"status": "ok", "mode": "active", "message": "Polling resumed"}
+
+
+# ============================================================================
+# LIVE MONITOR (fan-out) — one DOD feed per device, broadcast to many clients
+# ============================================================================
+
+@router.websocket("/{unit_id}/monitor")
+async def monitor_stream(websocket: WebSocket, unit_id: str):
+    """Subscribe a browser to the device's shared 1 Hz DOD feed.
+
+    Any number of clients can attach without each opening its own device
+    connection (one poll loop per device, fanned out). Same JSON shape as the
+    DRD stream, but DOD-sourced so it includes ln1/ln2 (L1/L10).
+    """
+    await websocket.accept()
+    from app.monitor import monitor_manager
+
+    monitor = await monitor_manager.get(unit_id)
+    queue = await monitor.subscribe()
+    logger.info(f"Monitor subscriber attached for {unit_id} ({monitor.subscriber_count()} total)")
+
+    async def _watch_disconnect():
+        # Completes when the client disconnects, so an idle feed (no data) still
+        # detects the drop and we don't leak a subscription that keeps the device
+        # feed (and its connection) alive.
+        try:
+            while True:
+                msg = await websocket.receive()
+                if msg.get("type") == "websocket.disconnect":
+                    return
+        except Exception:
+            return
+
+    gone = asyncio.ensure_future(_watch_disconnect())
+    try:
+        while not gone.done():
+            try:
+                payload = await asyncio.wait_for(queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue  # re-check gone.done()
+            if gone.done():
+                break  # client disconnected while we waited — don't send into a closing socket
+            await websocket.send_json(payload)
+    except WebSocketDisconnect:
+        logger.info(f"Monitor subscriber disconnected for {unit_id}")
+    except Exception as e:
+        # A frame that races the close (client vanished mid-send) surfaces as
+        # "Unexpected ASGI message 'websocket.send' after ... websocket.close".
+        # That's expected on disconnect (the portal closes the socket on every tab
+        # switch), not an error — log it quietly.
+        msg = str(e)
+        if "after sending" in msg or "websocket.close" in msg or "response already completed" in msg:
+            logger.debug(f"Monitor stream for {unit_id} closed mid-send (client gone)")
+        else:
+            logger.warning(f"Monitor stream error for {unit_id}: {e}")
+    finally:
+        gone.cancel()
+        await monitor.unsubscribe(queue)
+
+
+@router.post("/{unit_id}/monitor/start")
+async def monitor_start(unit_id: str, db: Session = Depends(get_db)):
+    """Enable 24/7 keepalive monitoring: persist monitor_enabled and start the feed
+    now, so alerting evaluates continuously even with no viewer. Survives restarts
+    (auto-started on boot from the persisted flag)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if cfg:
+        cfg.monitor_enabled = True
+        db.commit()
+    from app.monitor import monitor_manager
+    monitor = await monitor_manager.get(unit_id)
+    await monitor.set_keepalive(True)
+    return {"status": "ok", "unit_id": unit_id, "monitor_enabled": True, "running": monitor.running}
+
+
+@router.post("/{unit_id}/monitor/stop")
+async def monitor_stop(unit_id: str, db: Session = Depends(get_db)):
+    """Disable keepalive monitoring: persist monitor_enabled=False and drop the
+    keepalive (the feed stops once no browser subscribers remain)."""
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if cfg:
+        cfg.monitor_enabled = False
+        db.commit()
+    from app.monitor import monitor_manager
+    monitor = await monitor_manager.get(unit_id)
+    await monitor.set_keepalive(False)
+    return {"status": "ok", "unit_id": unit_id, "monitor_enabled": False}
+
+
+@router.get("/_monitor/status")
+async def monitor_status():
+    """Status of every device monitor (running, subscriber count, keep-alive)."""
+    from app.monitor import monitor_manager
+    return {"status": "ok", "monitors": monitor_manager.status()}
+
+
+@router.get("/{unit_id}/history")
+def get_monitor_history(unit_id: str, hours: float = 2.0, db: Session = Depends(get_db)):
+    """Recent downsampled monitor readings (the DOD trail) for the live-chart
+    backfill. Viewing only — NOT the FTP report data."""
+    from datetime import timedelta
+    hours = max(0.1, min(hours, 48.0))
+    cutoff = datetime.utcnow() - timedelta(hours=hours)
+    rows = (db.query(NL43Reading)
+            .filter(NL43Reading.unit_id == unit_id, NL43Reading.timestamp >= cutoff)
+            .order_by(NL43Reading.timestamp.asc()).all())
+    return {
+        "status": "ok",
+        "unit_id": unit_id,
+        "hours": hours,
+        "count": len(rows),
+        "readings": [
+            {
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "lp": r.lp, "leq": r.leq, "lmax": r.lmax, "ln1": r.ln1, "ln2": r.ln2,
+            }
+            for r in rows
+        ],
+    }
+
+
+# ============================================================================
+# ALERTS — threshold rules + fired events
+# ============================================================================
+
+class AlertRulePayload(BaseModel):
+    name: str = "Alert"
+    metric: str = "lp"            # lp/leq/lmax/lmin/lpeak/ln1/ln2
+    comparison: str = "above"     # above | below
+    threshold_db: float
+    duration_s: int = 0           # sustained seconds before firing (0 = instant)
+    clear_margin_db: float = 2.0  # hysteresis band
+    cooldown_s: int = 300
+    schedule_start: str | None = None  # "HH:MM" local; null = always
+    schedule_end: str | None = None
+    schedule_days: str | None = None   # CSV of 0-6 (Mon=0); null = every day
+    channels: str = "log"
+    recipients: str | None = None
+    enabled: bool = True
+
+
+def _rule_dict(r: AlertRule) -> dict:
+    return {
+        "id": r.id, "unit_id": r.unit_id, "name": r.name, "metric": r.metric,
+        "comparison": r.comparison, "threshold_db": r.threshold_db,
+        "duration_s": r.duration_s, "clear_margin_db": r.clear_margin_db,
+        "cooldown_s": r.cooldown_s, "schedule_start": r.schedule_start,
+        "schedule_end": r.schedule_end, "schedule_days": r.schedule_days,
+        "channels": r.channels, "recipients": r.recipients, "enabled": r.enabled,
+    }
+
+
+def _event_dict(e: AlertEvent) -> dict:
+    return {
+        "id": e.id, "rule_id": e.rule_id, "unit_id": e.unit_id,
+        "rule_name": e.rule_name, "metric": e.metric, "threshold_db": e.threshold_db,
+        "onset_at": e.onset_at.isoformat() if e.onset_at else None,
+        "onset_value": e.onset_value, "peak_value": e.peak_value,
+        "clear_at": e.clear_at.isoformat() if e.clear_at else None,
+        "status": e.status,
+        "acknowledged_at": e.acknowledged_at.isoformat() if e.acknowledged_at else None,
+        "acknowledged_by": e.acknowledged_by,
+    }
+
+
+async def _sync_keepalive_to_rules(unit_id: str, db: Session):
+    """Keep a unit's monitor running while it has enabled alert rules, so the
+    evaluator runs 24/7 even with no browser watching. Turns keepalive ON (and
+    persists monitor_enabled so it survives a restart via the boot auto-start)
+    when enabled rules exist; never turns it OFF — a device may be kept alive for
+    other reasons, so operators control that on /admin/slmm."""
+    has_enabled = (db.query(AlertRule)
+                   .filter_by(unit_id=unit_id, enabled=True).first() is not None)
+    if not has_enabled:
+        return
+    cfg = db.query(NL43Config).filter_by(unit_id=unit_id).first()
+    if cfg and not cfg.monitor_enabled:
+        cfg.monitor_enabled = True
+        db.commit()
+    from app.monitor import monitor_manager
+    m = await monitor_manager.get(unit_id)
+    await m.set_keepalive(True)
+
+
+def _reset_rule_runtime(unit_id: str, rule_id: int, db: Session):
+    """After a rule edit/delete: drop its evaluator state machine and close any open
+    event, so a stale 'active' phase doesn't mis-evaluate against the new config and
+    the client portal doesn't stay 'in alarm' on a rule that changed or is gone."""
+    from app.alerts import alert_evaluator
+    alert_evaluator.forget_rule(unit_id, rule_id)
+    now = datetime.utcnow()
+    for evt in db.query(AlertEvent).filter_by(unit_id=unit_id, rule_id=rule_id, status="active").all():
+        evt.clear_at = now
+        evt.status = "cleared"
+    db.commit()
+
+
+@router.post("/{unit_id}/alerts/rules")
+async def create_alert_rule(unit_id: str, payload: AlertRulePayload, db: Session = Depends(get_db)):
+    rule = AlertRule(unit_id=unit_id, **payload.model_dump())
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    from app.alerts import alert_evaluator
+    alert_evaluator.invalidate(unit_id)
+    await _sync_keepalive_to_rules(unit_id, db)
+    return {"status": "ok", "rule": _rule_dict(rule)}
+
+
+@router.get("/{unit_id}/alerts/rules")
+def list_alert_rules(unit_id: str, db: Session = Depends(get_db)):
+    rules = db.query(AlertRule).filter_by(unit_id=unit_id).all()
+    return {"status": "ok", "rules": [_rule_dict(r) for r in rules]}
+
+
+@router.put("/{unit_id}/alerts/rules/{rule_id}")
+async def update_alert_rule(unit_id: str, rule_id: int, payload: AlertRulePayload, db: Session = Depends(get_db)):
+    rule = db.query(AlertRule).filter_by(id=rule_id, unit_id=unit_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Alert rule not found")
+    for field, value in payload.model_dump().items():
+        setattr(rule, field, value)
+    db.commit()
+    db.refresh(rule)
+    from app.alerts import alert_evaluator
+    alert_evaluator.invalidate(unit_id)
+    _reset_rule_runtime(unit_id, rule_id, db)
+    await _sync_keepalive_to_rules(unit_id, db)
+    return {"status": "ok", "rule": _rule_dict(rule)}
+
+
+@router.delete("/{unit_id}/alerts/rules/{rule_id}")
+async def delete_alert_rule(unit_id: str, rule_id: int, db: Session = Depends(get_db)):
+    rule = db.query(AlertRule).filter_by(id=rule_id, unit_id=unit_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail="Alert rule not found")
+    db.delete(rule)
+    db.commit()
+    from app.alerts import alert_evaluator
+    alert_evaluator.invalidate(unit_id)
+    _reset_rule_runtime(unit_id, rule_id, db)   # close its open event so the portal doesn't stay red
+    await _sync_keepalive_to_rules(unit_id, db)  # no-op if no enabled rules remain
+    return {"status": "ok", "deleted": rule_id}
+
+
+@router.get("/{unit_id}/alerts/events")
+def list_alert_events(unit_id: str, limit: int = 50, db: Session = Depends(get_db)):
+    events = (db.query(AlertEvent).filter_by(unit_id=unit_id)
+              .order_by(AlertEvent.onset_at.desc()).limit(limit).all())
+    return {"status": "ok", "events": [_event_dict(e) for e in events]}
+
+
+@router.post("/{unit_id}/alerts/events/{event_id}/ack")
+def ack_alert_event(unit_id: str, event_id: int, by: str | None = None, db: Session = Depends(get_db)):
+    evt = db.query(AlertEvent).filter_by(id=event_id, unit_id=unit_id).first()
+    if not evt:
+        raise HTTPException(status_code=404, detail="Alert event not found")
+    evt.acknowledged_at = datetime.utcnow()
+    evt.acknowledged_by = by
+    db.commit()
+    return {"status": "ok", "acknowledged": event_id}
+
+
 # ============================================================================
 # GLOBAL POLLING STATUS ENDPOINT (must be before /{unit_id} routes)
 # ============================================================================
@@ -197,6 +583,7 @@ def get_roster(db: Session = Depends(get_db)):
             "web_enabled": cfg.web_enabled,
             "poll_enabled": cfg.poll_enabled,
             "poll_interval_seconds": cfg.poll_interval_seconds,
+            "monitor_enabled": cfg.monitor_enabled,
             "status": None
         }
 
@@ -445,11 +832,14 @@ def get_status(unit_id: str, db: Session = Depends(get_db)):
             "unit_id": unit_id,
             "last_seen": status.last_seen.isoformat() if status.last_seen else None,
             "measurement_state": status.measurement_state,
+            "measurement_start_time": status.measurement_start_time.isoformat() if status.measurement_start_time else None,
             "lp": status.lp,
             "leq": status.leq,
             "lmax": status.lmax,
             "lmin": status.lmin,
             "lpeak": status.lpeak,
+            "ln1": status.ln1,
+            "ln2": status.ln2,
             "battery_level": status.battery_level,
             "power_source": status.power_source,
             "sd_remaining_mb": status.sd_remaining_mb,
@@ -472,6 +862,8 @@ class StatusPayload(BaseModel):
     lmax: str | None = None
     lmin: str | None = None
     lpeak: str | None = None
+    ln1: str | None = None
+    ln2: str | None = None
     battery_level: str | None = None
     power_source: str | None = None
     sd_remaining_mb: str | None = None
@@ -499,11 +891,14 @@ def upsert_status(unit_id: str, payload: StatusPayload, db: Session = Depends(ge
             "unit_id": unit_id,
             "last_seen": status.last_seen.isoformat(),
             "measurement_state": status.measurement_state,
+            "measurement_start_time": status.measurement_start_time.isoformat() if status.measurement_start_time else None,
             "lp": status.lp,
             "leq": status.leq,
             "lmax": status.lmax,
             "lmin": status.lmin,
             "lpeak": status.lpeak,
+            "ln1": status.ln1,
+            "ln2": status.ln2,
             "battery_level": status.battery_level,
             "power_source": status.power_source,
             "sd_remaining_mb": status.sd_remaining_mb,
@@ -544,7 +939,7 @@ async def start_measurement(unit_id: str, db: Session = Depends(get_db)):
             db.expire_all()
             status = db.query(NL43Status).filter_by(unit_id=unit_id).first()
             logger.info(f"State check: measurement_state={status.measurement_state if status else 'None'}, start_time={status.measurement_start_time if status else 'None'}")
-            if status and status.measurement_state == "Measure" and status.measurement_start_time:
+            if status and status.measurement_state in ("Start", "Measure") and status.measurement_start_time:
                 logger.info(f"✓ Measurement state confirmed for {unit_id} with start time {status.measurement_start_time}")
                 break
 
@@ -1205,6 +1600,8 @@ async def stream_live(websocket: WebSocket, unit_id: str):
                     "lmax": snap.lmax,  # Maximum level
                     "lmin": snap.lmin,  # Minimum level
                     "lpeak": snap.lpeak,  # Peak level
+                    "ln1": snap.ln1,    # LN1 percentile (L1/L10 contract); null on DRD stream
+                    "ln2": snap.ln2,    # LN2 percentile; null on DRD stream
                     "raw_payload": snap.raw_payload,
                 })
             except Exception as e:
@@ -1876,6 +2273,8 @@ async def run_diagnostics(unit_id: str, db: Session = Depends(get_db)):
             "lmax": status.lmax,
             "lmin": status.lmin,
             "lpeak": status.lpeak,
+            "ln1": status.ln1,
+            "ln2": status.ln2,
             "battery_level": status.battery_level,
             "power_source": status.power_source,
             "sd_remaining_mb": status.sd_remaining_mb,

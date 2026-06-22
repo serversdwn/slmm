@@ -1,6 +1,6 @@
 # SLMM - Sound Level Meter Manager
 
-**Version 0.3.0**
+**Version 0.4.0**
 
 Backend API service for controlling and monitoring Rion NL-43/NL-53 Sound Level Meters via TCP and FTP protocols.
 
@@ -12,6 +12,9 @@ SLMM is a standalone backend module that provides REST API routing and command t
 
 ## Features
 
+- **Live Monitor (fan-out)**: One shared cached live feed per device — many clients subscribe to the same stream instead of fighting over the meter's single TCP connection
+- **Alert Engine**: Per-device threshold rules with onset/clear events, cooldowns, acks, and 24/7 evaluation
+- **History & Percentiles**: Downsampled DOD trail + history endpoint for live-chart backfill; LN1/LN2 (L1/L10) percentiles surfaced through the feed
 - **Persistent TCP Connections**: Cached per-device connections with OS-level keepalive, tuned for cellular modem reliability
 - **Background Polling**: Continuous automatic polling of devices with configurable intervals
 - **Offline Detection**: Automatic device reachability tracking with failure counters
@@ -43,6 +46,30 @@ SLMM is a standalone backend module that provides REST API routing and command t
                                   │  • Status    │
                                   └──────────────┘
 ```
+
+### Live Monitor — Fan-Out Feed (v0.4.0)
+
+The NL-43 allows only one TCP control connection at a time, so multiple clients
+polling the same device directly would contend for it. The monitor solves this
+with a single shared, cached feed per device:
+
+- **One reader, many subscribers**: a single poller reads the device; every
+  WebSocket subscriber (`WS /api/nl43/{unit_id}/monitor`) receives the same
+  frames — an instant first frame from cache, then live updates.
+- **Persistent + auto-start**: a `monitor_enabled` flag keeps the feed running
+  and auto-starts it on boot. Enabled alert rules pin the monitor on for 24/7
+  evaluation even with no UI connected.
+- **Adaptive & deduplicated**: poll rate adapts to demand, unreachable devices
+  back off, and the background poller skips units already covered by a monitor.
+
+### Alert Engine (v0.4.0)
+
+Per-device threshold alerting evaluated against the live feed:
+
+- **Rules**: metric + threshold + `cooldown_s`, full CRUD per device
+- **Events**: onset/clear state machine, acknowledgement, and a device-offline
+  alert when a monitored unit drops
+- **Robust**: editing/deleting a rule resets its state and closes open events
 
 ### Persistent TCP Connection Pool (v0.3.0)
 
@@ -145,7 +172,31 @@ Logs are written to:
 |--------|----------|-------------|
 | GET | `/api/nl43/{unit_id}/status` | Get cached measurement snapshot (updated by background poller) |
 | GET | `/api/nl43/{unit_id}/live` | Request fresh DOD data from device (bypasses cache) |
+| GET | `/api/nl43/{unit_id}/history` | Downsampled DOD trail for live-chart backfill |
 | WS | `/api/nl43/{unit_id}/stream` | WebSocket stream for real-time DRD data |
+
+### Live Monitor (fan-out feed)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| WS | `/api/nl43/{unit_id}/monitor` | Subscribe to the shared cached live feed (instant first frame) |
+| POST | `/api/nl43/{unit_id}/monitor/start` | Start the device's monitor feed |
+| POST | `/api/nl43/{unit_id}/monitor/stop` | Stop the device's monitor feed |
+| GET | `/api/nl43/_monitor/status` | Global monitor status across devices |
+| POST | `/api/nl43/{unit_id}/disconnect` | Drop the device's pooled TCP connection |
+| POST | `/api/nl43/{unit_id}/deactivate` | Quiesce polling/monitoring for one device |
+| POST | `/api/nl43/_system/standby` | Global standby — quiesce all polling/monitoring |
+
+### Alerts
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/nl43/{unit_id}/alerts/rules` | List alert rules for a device |
+| POST | `/api/nl43/{unit_id}/alerts/rules` | Create an alert rule (metric, threshold, cooldown) |
+| PUT | `/api/nl43/{unit_id}/alerts/rules/{rule_id}` | Update a rule (resets its state, closes open events) |
+| DELETE | `/api/nl43/{unit_id}/alerts/rules/{rule_id}` | Delete a rule |
+| GET | `/api/nl43/{unit_id}/alerts/events` | List alert events (onset/clear) |
+| POST | `/api/nl43/{unit_id}/alerts/events/{event_id}/ack` | Acknowledge an event |
 
 ### Background Polling
 
@@ -273,11 +324,35 @@ Caches latest measurement snapshot:
 - `sd_remaining_mb`: Free SD card space (MB)
 - `sd_free_ratio`: SD card free space ratio
 - `raw_payload`: Raw device response data
-- `is_reachable`: Device reachability status (Boolean) ⭐ NEW
-- `consecutive_failures`: Count of consecutive poll failures ⭐ NEW
-- `last_poll_attempt`: Last time background poller attempted to poll ⭐ NEW
-- `last_success`: Last successful poll timestamp ⭐ NEW
-- `last_error`: Last error message (truncated to 500 chars) ⭐ NEW
+- `is_reachable`: Device reachability status (Boolean)
+- `consecutive_failures`: Count of consecutive poll failures
+- `last_poll_attempt`: Last time background poller attempted to poll
+- `last_success`: Last successful poll timestamp
+- `last_error`: Last error message (truncated to 500 chars)
+- `ln1` / `ln2`: LN1/LN2 (L1/L10) percentile levels ⭐ v0.4.0
+
+### NL43Readings Table ⭐ v0.4.0
+Downsampled DOD trail backing the live-chart history endpoint (one row/minute,
+pruned to a retention window — viewing only, not the report source):
+- `id` (PK), `unit_id`, `timestamp`
+- `lp` / `leq` / `lmax` / `ln1` / `ln2`: cached level samples
+
+### AlertRule Table ⭐ v0.4.0
+Per-device threshold alert rules:
+- `id` (PK), `unit_id`, `name`, `enabled`
+- `metric`, `comparison` (above/below), `threshold_db`, `clear_margin_db` (hysteresis)
+- `duration_s` (sustained), `cooldown_s` (min seconds between onsets)
+- `channels` / `recipients`, optional `schedule_start`/`schedule_end`/`schedule_days`
+
+### AlertEvent Table ⭐ v0.4.0
+Alert onset/clear events for history, inbox, and acknowledgement:
+- `id` (PK), `unit_id`, `rule_id`, `rule_name`, `metric`, `threshold_db`
+- `onset_at` / `onset_value`, `peak_value`, `clear_at`, `status` (active/cleared)
+- `acknowledged_at` / `acknowledged_by`, `notes`
+
+> New tables (`alert_rules`, `alert_events`, `nl43_readings`) auto-create on
+> startup. Existing-table columns ship with migrations:
+> `migrate_add_ln_percentiles.py`, `migrate_add_monitor_enabled.py`.
 
 ## Protocol Details
 
